@@ -39,14 +39,17 @@ cat > "$bundle_dir/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIdentifier</key><string>com.quotabar.app</string>
   <key>CFBundleExecutable</key><string>QuotaBar</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.5.0</string>
-  <key>CFBundleVersion</key><string>5</string>
+  <key>CFBundleShortVersionString</key><string>0.6.0</string>
+  <key>CFBundleVersion</key><string>6</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <key>CFBundleIconFile</key><string>QuotaBar</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict>
 </plist>
 PLIST
+xcrun swift "$project_dir/scripts/render-icon.swift" "$project_dir/dist"
+iconutil -c icns "$project_dir/dist/QuotaBar.iconset" -o "$bundle_dir/Contents/Resources/QuotaBar.icns"
 # Embed the pinned Sparkle framework and its license, preserving symlinks.
 sparkle_framework="$(find "$project_dir/.build/artifacts" -type d -path '*/macos-arm64_x86_64/Sparkle.framework' -print -quit)"
 test -n "$sparkle_framework"

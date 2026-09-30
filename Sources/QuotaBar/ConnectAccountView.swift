@@ -28,16 +28,16 @@ struct ConnectAccountView: View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(request.account == nil ? "Add an account" : "Reconnect account").font(.title2.bold())
+                    Text(request.account == nil ? "Add an account" : "Reconnect account").font(.title2.bold()).accessibilityAddTraits(.isHeader)
                     Text("Each account has its own credentials.").foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button { dismiss() } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }.buttonStyle(.plain)
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).disabled(saving)
             }
             Picker("Provider", selection: $provider) {
                 ForEach(Provider.allCases) { Text($0.title).tag($0) }
             }.pickerStyle(.segmented).disabled(request.account != nil || login.running || saving)
-            TextField("Account label (e.g. Personal, Work)", text: $name).textFieldStyle(.roundedBorder)
+            TextField("Account name", text: $name, prompt: Text("Personal or Work")).textFieldStyle(.roundedBorder)
             if provider == .openAI {
                 Text("Sign in with OpenAI").font(.headline)
                 Text("Codex opens a device-code login in an isolated folder. Your usual Codex account is unaffected.")
@@ -46,7 +46,7 @@ struct ConnectAccountView: View {
                 HStack {
                     Button(login.running ? "Restart login" : "Sign in with OpenAI") {
                         login.start(root: store.root, executable: executable) { save($0) }
-                    }.buttonStyle(.borderedProminent).disabled(saving)
+                    }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction).disabled(saving)
                     Link("Open verification page", destination: URL(string: "https://auth.openai.com/codex/device")!)
                 }
                 if !login.output.isEmpty {
@@ -85,7 +85,7 @@ struct ConnectAccountView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(28).frame(width: 550)
+        .padding(24).frame(width: 560)
         .fileImporter(isPresented: $importing, allowedContentTypes: [.json, .data]) { result in
             do {
                 let url = try result.get()
@@ -100,10 +100,10 @@ struct ConnectAccountView: View {
             VStack(spacing: 0) {
                 HStack {
                     Text("Claude · private sign-in session").font(.headline)
-                    Spacer(); Button("Cancel") { showBrowser = false }
+                    Spacer(); Button("Cancel") { showBrowser = false }.keyboardShortcut(.cancelAction)
                 }.padding()
                 ClaudeSignIn { credential in showBrowser = false; save(credential) }
-            }.frame(width: 780, height: 640)
+            }.frame(minWidth: 580, idealWidth: 740, maxWidth: .infinity, minHeight: 440, idealHeight: 560, maxHeight: .infinity)
         }
         .onDisappear { login.cancel() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in login.cancel() }

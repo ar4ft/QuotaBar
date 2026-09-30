@@ -62,13 +62,25 @@ final class AccountStore: ObservableObject {
     private var timerTask: Task<Void, Never>?
     private var scheduledRefreshTask: Task<Void, Never>?
     private var writable = true
+    private let isPreview: Bool
     private var epoch: [UUID: UUID] = [:]
     var metadataURL: URL { root.appendingPathComponent("accounts.json") }
 
-    init() {
+    init(previewAccounts: [Account]? = nil, previewDefaults: UserDefaults? = nil) {
+        isPreview = previewAccounts != nil
         root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("QuotaBar", isDirectory: true)
         historyRepository = UsageHistoryRepository(directory: root.appendingPathComponent("History", isDirectory: true))
+        if let previewAccounts {
+            accounts = previewAccounts; writable = false
+            if let previewDefaults {
+                _presentationMode = AppStorage(wrappedValue: false, "presentationMode", store: previewDefaults)
+                _showRemaining = AppStorage(wrappedValue: true, "showRemaining", store: previewDefaults)
+                _accountSortRaw = AppStorage(wrappedValue: AccountSort.added.rawValue, "accountSort", store: previewDefaults)
+                _pinnedAccountID = AppStorage(wrappedValue: "", "pinnedAccountID", store: previewDefaults)
+            }
+            return
+        }
         do {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true,
                                                     attributes: [.posixPermissions: 0o700])
@@ -83,7 +95,7 @@ final class AccountStore: ObservableObject {
         }
     }
     func start() {
-        guard timerTask == nil else { return }
+        guard !isPreview, timerTask == nil else { return }
         timerTask = Task { [weak self] in
             await self?.refreshNotificationAuthorization()
             self?.scheduleRefresh(allAccounts: true)
@@ -164,6 +176,7 @@ final class AccountStore: ObservableObject {
         }
     }
     func refresh(_ id: UUID) async {
+        guard !isPreview else { return }
         guard !refreshing.contains(id), accounts.contains(where: { $0.id == id }), writable else { return }
         if let until = cooldowns[id], until > Date() { return }
         let generation = epoch[id] ?? UUID(); epoch[id] = generation
@@ -232,6 +245,7 @@ final class AccountStore: ObservableObject {
         }
     }
     func loadHistory(_ id: UUID) async {
+        guard !isPreview else { return }
         guard accounts.contains(where: { $0.id == id }) else { return }
         do {
             let samples = try await historyRepository.load(id)

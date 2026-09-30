@@ -2,10 +2,6 @@
 import SwiftUI
 import QuotaCore
 
-extension Provider {
-    var tint: Color { self == .openAI ? Color(red: 0.13, green: 0.60, blue: 0.46) : Color(red: 0.78, green: 0.44, blue: 0.30) }
-    var symbol: String { self == .openAI ? "sparkle" : "sun.max" }
-}
 private enum AccountFilter: String, CaseIterable, Identifiable {
     case all, openAI, claude
     var id: String { rawValue }
@@ -31,53 +27,40 @@ struct DashboardView: View {
     }
     var body: some View {
         NavigationSplitView {
-            VStack(alignment: .leading, spacing: 22) {
-                HStack(spacing: 10) {
-                    Image(systemName: "chart.bar.xaxis").font(.title2).foregroundStyle(.mint)
-                    Text("QuotaBar").font(.title3.weight(.semibold))
-                }.padding(.horizontal, 20).padding(.top, 24)
-                Text("WORKSPACE").font(.system(size: 10, weight: .semibold)).tracking(1.5)
-                    .foregroundStyle(.secondary).padding(.horizontal, 20)
-                List(AccountFilter.allCases, selection: $filter) { item in
-                    HStack {
-                        Label(item.title, systemImage: item.symbol)
-                        Spacer()
-                        Text("\(count(item))").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                    }.padding(.vertical, 5).tag(item)
-                }.listStyle(.sidebar)
-                Spacer()
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Stored on this Mac", systemImage: "lock.shield").font(.caption.weight(.medium))
-                    Text("Independent accounts.\nOne clear view of your limits.")
-                        .font(.caption).foregroundStyle(.secondary).lineSpacing(3)
-                }.padding(20)
-            }.navigationSplitViewColumnWidth(min: 190, ideal: 215, max: 260)
+            List(selection: $filter) {
+                Section("Accounts") {
+                    ForEach(AccountFilter.allCases) { item in
+                        HStack {
+                            Label(item.title, systemImage: item.symbol)
+                            Spacer()
+                            Text("\(count(item))").monospacedDigit().foregroundStyle(.secondary)
+                        }.tag(item)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("\(item.title), \(count(item)) connected")
+                    }
+                }
+            }.listStyle(.sidebar)
+                .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 280)
+                .safeAreaInset(edge: .bottom) {
+                    Label("Stored on this Mac", systemImage: "lock.shield")
+                        .font(.caption).foregroundStyle(.secondary).padding(16)
+                }
         } detail: {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
-                    header
                     Button {
                         store.showConnectionHealth = true
                     } label: {
                         Label(store.presentationMode ? "Connection health" : "Connection health · \(store.attentionCount) need attention",
                               systemImage: "network")
                     }.buttonStyle(.plain).foregroundStyle(.secondary)
-                    HStack(spacing: 16) {
-                        MetricTile(title: "CONNECTED", value: "\(filtered.count)", detail: "subscription accounts", symbol: "person.2")
-                        MetricTile(title: "AVAILABLE", value: store.presentationMode ? "—" : "\(filtered.filter { store.availability($0).status.isAvailable }.count)", detail: "accounts with allowance left", symbol: "checkmark.circle")
-                        MetricTile(title: "NEXT RESET", value: store.presentationMode ? "—" : nextReset, detail: "earliest upcoming window", symbol: "clock.arrow.circlepath")
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 12) { metrics }
+                        VStack(spacing: 12) { metrics }
                     }
-                    HStack {
-                        Text("YOUR ACCOUNTS").font(.system(size: 11, weight: .semibold)).tracking(1.5).foregroundStyle(.secondary)
-                        Spacer()
-                        Toggle("Available only", isOn: $availableOnly).disabled(store.presentationMode).toggleStyle(.button).controlSize(.small)
-                        Picker("Sort accounts", selection: $store.accountSortRaw) {
-                            ForEach(AccountSort.allCases) { Text($0.title).tag($0.rawValue) }
-                        }.labelsHidden().frame(width: 175)
-                        Picker("Layout", selection: $listLayout) {
-                            Image(systemName: "square.grid.2x2").tag(false)
-                            Image(systemName: "list.bullet").tag(true)
-                        }.pickerStyle(.segmented).frame(width: 90)
+                    ViewThatFits(in: .horizontal) {
+                        HStack { accountControls }
+                        VStack(alignment: .leading, spacing: 12) { accountControls }
                     }
                     if store.accounts.isEmpty { emptyState }
                     else if filtered.isEmpty {
@@ -92,20 +75,27 @@ struct DashboardView: View {
                     }
                     Text("OpenAI readings reflect Codex allowance. Limits and reset times come from each provider.")
                         .font(.caption).foregroundStyle(.secondary)
-                }.padding(30).frame(maxWidth: 1350)
+                }.padding(24).frame(maxWidth: 1350)
             }.background(Color(nsColor: .windowBackgroundColor))
-            .navigationTitle("")
+            .navigationTitle(filter?.title ?? "All accounts")
+            .navigationSubtitle("\(filtered.count) connected")
             .searchable(text: $search, placement: .toolbar, prompt: "Find an account")
             .toolbar {
-                ToolbarItem {
-                    Toggle(isOn: $store.presentationMode) { Image(systemName: store.presentationMode ? "eye.slash.fill" : "eye") }.toggleStyle(.button).help("Hide account details and silence usage alerts")
-                }
-                ToolbarItem {
-                    Button { Task { await store.refreshAll() } } label: { Image(systemName: "arrow.clockwise") }
-                        .help("Refresh all accounts").disabled(!store.refreshing.isEmpty)
+                ToolbarItemGroup {
+                    Toggle(isOn: $store.presentationMode) {
+                        Label("Presentation mode", systemImage: store.presentationMode ? "eye.slash.fill" : "eye")
+                    }.toggleStyle(.button)
+                        .help("Hide account details and silence usage alerts")
+                        .accessibilityLabel("Presentation mode")
+                    Button { Task { await store.refreshAll() } } label: {
+                        Label("Refresh accounts", systemImage: "arrow.clockwise")
+                    }.help("Refresh all accounts").disabled(!store.refreshing.isEmpty)
+                    Button { store.connect() } label: { Label("Add account", systemImage: "plus") }
+                        .help("Add an account").disabled(store.presentationMode)
                 }
             }
         }
+        .frame(minWidth: 740, minHeight: 500)
         .onChange(of: store.presentationMode) { _, hidden in
             if hidden { search = ""; availableOnly = false; renameAccount = nil; deleting = nil; historyAccount = nil }
         }
@@ -114,37 +104,42 @@ struct DashboardView: View {
         .sheet(item: $historyAccount) { account in UsageHistoryView(account: account).environmentObject(store) }
         .alert("Rename account", isPresented: Binding(get: { renameAccount != nil }, set: { if !$0 { renameAccount = nil } })) {
             TextField("Account name", text: $newName)
-            Button("Cancel", role: .cancel) { renameAccount = nil }
-            Button("Save") { if let account = renameAccount { store.rename(account.id, name: newName) }; renameAccount = nil }
+            Button("Cancel", role: .cancel) { renameAccount = nil }.keyboardShortcut(.cancelAction)
+            Button("Save") { if let account = renameAccount { store.rename(account.id, name: newName) }; renameAccount = nil }.keyboardShortcut(.defaultAction)
         }
         .alert("Remove this account?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Cancel", role: .cancel) { deleting = nil }
             Button("Remove", role: .destructive) { if let account = deleting { store.remove(account.id) }; deleting = nil }
-        } message: { Text("This removes its saved credentials from QuotaBar and Keychain.") }
+        } message: { Text("This removes the account, its credentials from Keychain, and its recorded usage history.") }
         .alert("Storage error", isPresented: Binding(get: { store.globalError != nil }, set: { if !$0 { store.globalError = nil } })) {
             Button("OK") { store.globalError = nil }
         } message: { Text(store.globalError ?? "") }
     }
-    private var header: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Account overview").font(.system(size: 30, weight: .semibold, design: .rounded))
-                Text("Keep an eye on usage. Know when you’re ready again.").foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button { store.connect() } label: { Label("Add account", systemImage: "plus") }
-                .buttonStyle(.borderedProminent).tint(.primary).controlSize(.large).disabled(store.presentationMode)
-        }
+    @ViewBuilder private var metrics: some View {
+        MetricTile(title: "Connected", value: "\(filtered.count)", detail: "subscription accounts", symbol: "person.2")
+        MetricTile(title: "Available", value: store.presentationMode ? "—" : "\(filtered.filter { store.availability($0).status.isAvailable }.count)", detail: "accounts with allowance left", symbol: "checkmark.circle")
+        MetricTile(title: "Next reset", value: store.presentationMode ? "—" : nextReset, detail: "earliest upcoming window", symbol: "clock.arrow.circlepath")
+    }
+    @ViewBuilder private var accountControls: some View {
+        Text("Accounts").font(.headline).accessibilityAddTraits(.isHeader)
+        Spacer(minLength: 12)
+        Toggle("Available only", isOn: $availableOnly).disabled(store.presentationMode).toggleStyle(.checkbox)
+        Picker("Sort accounts", selection: $store.accountSortRaw) {
+            ForEach(AccountSort.allCases) { Text($0.title).tag($0.rawValue) }
+        }.labelsHidden().frame(width: 170).accessibilityLabel("Sort accounts")
+        Picker("Layout", selection: $listLayout) {
+            Label("Grid", systemImage: "square.grid.2x2").tag(false)
+            Label("List", systemImage: "list.bullet").tag(true)
+        }.labelsHidden().pickerStyle(.segmented).frame(width: 100).accessibilityLabel("Account layout")
     }
     private var emptyState: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "person.crop.circle.badge.plus").font(.system(size: 42, weight: .light)).foregroundStyle(.mint)
-            Text("Your accounts, together").font(.title2.weight(.semibold))
-            Text("Connect OpenAI or Claude to see usage windows and upcoming resets here and in your menu bar.")
-                .foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 390)
-            Button("Connect your first account") { store.connect() }.buttonStyle(.borderedProminent)
-        }.frame(maxWidth: .infinity).padding(.vertical, 65)
-            .background(.background, in: RoundedRectangle(cornerRadius: 18))
+        ContentUnavailableView {
+            Label("Connect your accounts", systemImage: "person.crop.circle.badge.plus")
+        } description: {
+            Text("Add an OpenAI or Claude account to see usage and upcoming resets.")
+        } actions: {
+            Button("Add account") { store.connect() }.buttonStyle(.borderedProminent).disabled(store.presentationMode)
+        }.frame(maxWidth: .infinity).padding(.vertical, 40)
     }
     private func card(_ account: Account) -> some View {
         AccountCard(account: account, error: store.errors[account.id], refreshing: store.refreshing.contains(account.id),
@@ -172,13 +167,15 @@ private struct MetricTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(title).font(.system(size: 10, weight: .semibold)).tracking(1).foregroundStyle(.secondary)
-                Spacer(); Image(systemName: symbol).foregroundStyle(.secondary)
+                Text(title).font(.callout).foregroundStyle(.secondary)
+                Spacer(); Image(systemName: symbol).foregroundStyle(.secondary).accessibilityHidden(true)
             }
-            Text(value).font(.system(size: 28, weight: .medium, design: .rounded)).monospacedDigit()
+            Text(value).font(.title.weight(.semibold)).monospacedDigit()
             Text(detail).font(.caption).foregroundStyle(.secondary)
         }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
-            .background(.background, in: RoundedRectangle(cornerRadius: 14))
+            .modifier(AccountSurface())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title).accessibilityValue(value + ", " + detail)
     }
 }
 #endif

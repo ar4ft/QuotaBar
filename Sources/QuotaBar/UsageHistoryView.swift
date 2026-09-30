@@ -45,7 +45,7 @@ struct UsageHistoryView: View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("\(account.name) · usage history").font(.title2.bold())
+                    Text("\(account.name) · usage history").font(.title2.bold()).accessibilityAddTraits(.isHeader)
                     Text("Sampled provider readings stored on this Mac.").foregroundStyle(.secondary)
                 }
                 Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
@@ -89,13 +89,16 @@ struct UsageHistoryView: View {
                 ScrollView {
                     VStack(spacing: 8) {
                         HStack {
-                            Text("RECENT READINGS"); Spacer(); Text("USED")
-                        }.font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                            Text("Recent readings"); Spacer(); Text("Used")
+                        }.font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                         ForEach(points.suffix(20).reversed()) { point in
                             HStack {
                                 Text(point.observedAt.formatted(date: .abbreviated, time: .shortened))
                                 Spacer(); Text("\(point.usedPercent.formatted(.number.precision(.fractionLength(0...1))))%")
-                            }.font(.caption).monospacedDigit()
+                            }.font(.callout).monospacedDigit()
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel(point.observedAt.formatted(date: .abbreviated, time: .shortened))
+                                .accessibilityValue("\(Int(point.usedPercent.rounded())) percent used")
                         }
                     }
                 }.frame(height: 100)
@@ -112,7 +115,7 @@ struct UsageHistoryView: View {
                 Button("Export CSV · all windows") { csv = UsageHistory.csv(samples); exporting = true }
                     .disabled(samples.isEmpty).buttonStyle(.borderedProminent)
             }
-        }.padding(28).frame(width: 760, height: 740)
+        }.padding(24).frame(minWidth: 640, idealWidth: 760, maxWidth: .infinity, minHeight: 560, idealHeight: 660, maxHeight: .infinity)
             .task { await store.loadHistory(account.id); selectWindow(); loading = false }
             .onChange(of: windows.map(\.id)) { _, _ in selectWindow() }
             .fileExporter(isPresented: $exporting, document: HistoryCSVDocument(text: csv), contentType: .commaSeparatedText,

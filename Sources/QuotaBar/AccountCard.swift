@@ -22,18 +22,18 @@ struct AccountCard: View {
                 Label(account.provider.title + " account", systemImage: account.provider.symbol)
                 Text("Account details and balances hidden").font(.caption).foregroundStyle(.secondary)
             }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                .background(.background, in: RoundedRectangle(cornerRadius: 16))
+                .modifier(AccountSurface())
         } else { content }
         }
     }
     private var content: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 12) {
-                Image(systemName: account.provider.symbol).font(.title3)
+                Image(systemName: account.provider.symbol).accessibilityHidden(true).font(.title3)
                     .foregroundStyle(account.provider.tint).frame(width: 42, height: 42)
                     .background(account.provider.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(account.name).font(.headline).lineLimit(1)
+                    Text(account.name).font(.headline).lineLimit(2).textSelection(.enabled)
                     Text(account.detail ?? account.provider.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer()
@@ -45,9 +45,9 @@ struct AccountCard: View {
                     Divider(); Button("Remove account", role: .destructive, action: remove).disabled(refreshing)
                 } label: { Image(systemName: "ellipsis").frame(width: 20, height: 20) }
                     .menuStyle(.borderlessButton).fixedSize()
+                    .accessibilityLabel("Actions for " + account.name).help("Account actions")
             }
-            Text(availability.status.title).font(.caption.weight(.medium))
-                .foregroundStyle(availability.status.isAvailable ? account.provider.tint : .secondary)
+            AccountStatusLabel(status: availability.status)
             if let snapshot = account.snapshot {
                 CreditSummary(snapshot: snapshot, provider: account.provider)
                 ForEach(snapshot.windows) { window in
@@ -71,19 +71,19 @@ struct AccountCard: View {
                 else if let snapshot = account.snapshot {
                     TimelineView(.periodic(from: .now, by: 60)) { _ in
                         HStack(spacing: 5) {
-                            Circle().fill(snapshot.isStale || error != nil ? Color.orange : account.provider.tint).frame(width: 5, height: 5)
+                            Image(systemName: snapshot.isStale || error != nil ? "clock" : "checkmark.circle").accessibilityHidden(true)
                             Text(snapshot.isStale || error != nil ? "Last reading" : "Updated")
                             Text(snapshot.fetchedAt, style: .relative)
                         }.font(.caption).foregroundStyle(.secondary)
                     }
                 } else { Text("Awaiting first reading").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
-                Button("History", action: history).buttonStyle(.plain).font(.caption).foregroundStyle(account.provider.tint)
+                Button("History…", action: history).controlSize(.small).accessibilityLabel("Usage history for " + account.name)
                 if let plan = account.snapshot?.plan { Text(plan.capitalized).font(.caption.weight(.medium)).foregroundStyle(.secondary) }
             }
         }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
-            .background(.background, in: RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.06), lineWidth: 1))
+            .modifier(AccountSurface())
+            .accessibilityElement(children: .contain)
     }
 }
 
@@ -115,17 +115,16 @@ struct UsageMeter: View {
                     .font(.system(.callout, design: .rounded).weight(.semibold)).monospacedDigit()
                 Text(showRemaining ? "left" : "used").font(.caption).foregroundStyle(.secondary)
             }
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(tint.opacity(0.12))
-                    Capsule().fill(window.usedPercent >= 90 ? Color.orange : tint)
-                        .frame(width: max(0, proxy.size.width * (awaitingReset ? 0 : showRemaining ? window.remainingPercent : window.usedPercent) / 100))
-                }
-            }.frame(height: 6).accessibilityLabel(window.title)
-                .accessibilityValue(awaitingReset ? "Awaiting reset confirmation" : "\(Int(window.usedPercent)) percent used")
+            ProgressView(value: awaitingReset ? 0 : showRemaining ? window.remainingPercent : window.usedPercent, total: 100)
+                .progressViewStyle(.linear).tint(window.usedPercent >= 90 ? .orange : tint)
+                .accessibilityHidden(true)
                 Text(window.resetDescription(now: context.date)).font(.caption).foregroundStyle(.secondary)
                     .help(window.resetsAt.map { $0.formatted(date: .complete, time: .shortened) } ?? "Provider did not report a reset")
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(window.title)
+            .accessibilityValue(awaitingReset ? "Reset reached; refresh to confirm allowance" :
+                "\(Int(window.usedPercent.rounded())) percent used, \(window.resetDescription(now: context.date))")
         }
     }
 }

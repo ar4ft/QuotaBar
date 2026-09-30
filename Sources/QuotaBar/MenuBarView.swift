@@ -14,8 +14,8 @@ struct MenuBarView: View {
                 Spacer()
                 if !store.refreshing.isEmpty { ProgressView().controlSize(.small) }
                 else {
-                    Button { Task { await store.refreshAll() } } label: { Image(systemName: "arrow.clockwise") }
-                        .buttonStyle(.plain).help("Refresh all accounts")
+                    Button { Task { await store.refreshAll() } } label: { Label("Refresh accounts", systemImage: "arrow.clockwise") }
+                        .buttonStyle(.borderless).labelStyle(.iconOnly).help("Refresh all accounts")
                 }
             }.padding(16)
             Divider()
@@ -30,21 +30,23 @@ struct MenuBarView: View {
                         ForEach(store.orderedAccounts) { account in
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {
-                                    Image(systemName: account.provider.symbol).foregroundStyle(account.provider.tint)
+                                    Image(systemName: account.provider.symbol).foregroundStyle(account.provider.tint).accessibilityHidden(true)
                                     Text(store.presentationMode ? account.provider.title + " account" : account.name).font(.headline).lineLimit(1)
                                     Spacer()
                                     Button {
                                         store.pinAccount(store.pinnedAccountID == account.id.uuidString ? "" : account.id.uuidString)
                                     } label: {
                                         Image(systemName: store.pinnedAccountID == account.id.uuidString ? "pin.fill" : "pin")
-                                    }.buttonStyle(.plain).help("Pin account allowance in menu bar")
-                                    Button { dashboard(); store.connect(account) } label: { Image(systemName: "person.crop.circle.badge.checkmark") }
-                                        .buttonStyle(.plain).help("Reconnect account").disabled(store.presentationMode)
+                                    }.buttonStyle(.borderless).help("Pin account allowance in menu bar")
+                                        .accessibilityLabel(store.pinnedAccountID == account.id.uuidString ? "Unpin account" : "Pin account")
+                                        .accessibilityValue(store.pinnedAccountID == account.id.uuidString ? "Pinned" : "Not pinned")
+                                    Button { dashboard(); store.connect(account) } label: { Label("Reconnect account", systemImage: "person.crop.circle.badge.checkmark") }
+                                        .buttonStyle(.borderless).labelStyle(.iconOnly).help("Reconnect account").disabled(store.presentationMode)
                                 }
                                 if store.presentationMode {
                                     Text("Account details and balances hidden").font(.caption).foregroundStyle(.secondary)
                                 } else {
-                                    Text(store.availability(account).status.title).font(.caption).foregroundStyle(.secondary)
+                                    AccountStatusLabel(status: store.availability(account).status)
                                     if let snapshot = account.snapshot {
                                         CreditSummary(snapshot: snapshot, provider: account.provider)
                                         ForEach(snapshot.windows) { window in UsageMeter(window: window, tint: account.provider.tint, showRemaining: store.showRemaining) }
@@ -72,9 +74,9 @@ struct MenuBarView: View {
                     Button("Check for Updates…") { updater.check() }.disabled(!updater.canCheck)
                     SettingsLink { Text("Settings…") }
                     Button("Quit QuotaBar") { NSApplication.shared.terminate(nil) }
-                } label: { Image(systemName: "gearshape") }.menuStyle(.borderlessButton).fixedSize()
+                } label: { Label("Settings and actions", systemImage: "gearshape") }.menuStyle(.borderlessButton).fixedSize().labelStyle(.iconOnly).accessibilityLabel("Settings and actions")
             }.padding(14)
-        }.frame(width: 350)
+        }.frame(width: 380)
     }
     private func dashboard() {
         openWindow(id: "dashboard"); NSApplication.shared.activate(ignoringOtherApps: true)
@@ -85,7 +87,7 @@ struct MenuBarLabel: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
             HStack(spacing: 5) {
-                Image(systemName: "chart.bar.xaxis")
+                Image(systemName: "chart.bar.xaxis").accessibilityHidden(true)
                 if !store.presentationMode, let account = store.pinnedAccount {
                     let reading = MenuBarReading.make(snapshot: account.snapshot,
                         mode: MenuBarDisplay(rawValue: store.menuBarDisplayRaw) ?? .allowance, windowID: store.pinnedWindowID,
@@ -95,6 +97,9 @@ struct MenuBarLabel: View {
                 if !store.refreshing.isEmpty { Text("↻") }
             }
             .help(help(now: context.date))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("QuotaBar")
+            .accessibilityValue(help(now: context.date))
         }
     }
     private func help(now: Date) -> String {

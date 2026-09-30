@@ -12,7 +12,8 @@ struct PreferencesView: View {
     @State private var alertAccountID = ""
     private var alertAccount: Account? { store.accounts.first { $0.id.uuidString == alertAccountID } }
     var body: some View {
-        Form {
+        TabView {
+            Form {
             Section("General") {
                 Picker("Refresh accounts every", selection: $store.refreshMinutes) {
                     Text("1 minute").tag(1); Text("5 minutes").tag(5); Text("15 minutes").tag(15); Text("30 minutes").tag(30)
@@ -46,6 +47,8 @@ struct PreferencesView: View {
                 if let error = shortcut.error { Text(error).font(.caption).foregroundStyle(.orange) }
                 Text("Default: Control + Option + Q. No Accessibility permission is needed.").font(.caption).foregroundStyle(.secondary)
             }
+            }.formStyle(.grouped).tabItem { Label("General", systemImage: "gearshape") }
+            Form {
             Section("Menu bar") {
                 Picker("Display", selection: $store.menuBarDisplayRaw) {
                     ForEach(MenuBarDisplay.allCases) { Text($0.title).tag($0.rawValue) }
@@ -66,19 +69,8 @@ struct PreferencesView: View {
                 Text("Shows your selected reading beside the menu bar icon. Credits are reported for eligible OpenAI accounts; missing balances remain unknown. A ~ marks a stale reading; — means no reading or a reset awaiting confirmation.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Updates") {
-                if updater.configured {
-                    Toggle("Automatically check for updates", isOn: Binding(get: { updater.automaticChecks }, set: updater.setAutomaticChecks))
-                    Toggle("Automatically download updates", isOn: Binding(get: { updater.automaticDownloads }, set: updater.setAutomaticDownloads))
-                        .disabled(!updater.automaticChecks)
-                    Button("Check for Updates…", action: updater.check).disabled(!updater.canCheck)
-                    Text("Updates use a signed feed and signed downloads. Installation is handled by Sparkle.").font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Text("Automatic updates are available in signed release builds. This development artifact has no configured update signing key.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Link("Open QuotaBar downloads", destination: URL(string: "https://github.com/ar4ft/QuotaBar/releases")!)
-                }
-            }
+            }.formStyle(.grouped).tabItem { Label("Menu Bar", systemImage: "menubar.rectangle") }
+            Form {
             Section("Usage alerts") {
                 Toggle("Enable usage notifications", isOn: Binding(get: { store.notificationsEnabled }, set: { value in
                     Task { await store.setNotificationsEnabled(value) }
@@ -134,7 +126,23 @@ struct PreferencesView: View {
                 Text("One threshold alert per window and reset cycle. Recovery alerts require a fresh provider reading, after exhaustion or a confirmed reset from at least 80% usage. macOS Focus settings can silence notifications.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-        }.formStyle(.grouped).padding().frame(width: 560, height: 780)
+            }.formStyle(.grouped).tabItem { Label("Alerts", systemImage: "bell") }
+            Form {
+            Section("Updates") {
+                if updater.configured {
+                    Toggle("Automatically check for updates", isOn: Binding(get: { updater.automaticChecks }, set: updater.setAutomaticChecks))
+                    Toggle("Automatically download updates", isOn: Binding(get: { updater.automaticDownloads }, set: updater.setAutomaticDownloads))
+                        .disabled(!updater.automaticChecks)
+                    Button("Check for Updates…", action: updater.check).disabled(!updater.canCheck)
+                    Text("Updates use a signed feed and signed downloads. Installation is handled by Sparkle.").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("Automatic updates are available in release builds. You can download development builds from GitHub.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Link("Open QuotaBar downloads", destination: URL(string: "https://github.com/ar4ft/QuotaBar/actions")!)
+                }
+            }
+            }.formStyle(.grouped).tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }
+        }.padding(12).frame(width: 620, height: 540)
             .task {
                 login.refresh(); await store.refreshNotificationAuthorization()
                 selectAlertAccount()

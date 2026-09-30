@@ -11,7 +11,7 @@ struct ConnectionHealthView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text("Connection health").font(.title2.bold())
+                Text("Connection health").font(.title2.bold()).accessibilityAddTraits(.isHeader)
                 Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }
             if store.presentationMode {
@@ -20,7 +20,7 @@ struct ConnectionHealthView: View {
             } else if accounts.isEmpty {
                 ContentUnavailableView("No connected accounts", systemImage: "person.crop.circle")
             } else {
-                Text("\(store.attentionCount) account(s) need attention. Usage limits do not count as connection failures.")
+                Text("\(store.attentionCount) \(store.attentionCount == 1 ? "account needs" : "accounts need") attention. Usage limits do not count as connection failures.")
                     .font(.caption).foregroundStyle(.secondary)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
@@ -51,7 +51,7 @@ struct ConnectionHealthView: View {
                     }
                 }
             }
-        }.padding(24).frame(width: 660, height: 520)
+        }.padding(24).frame(minWidth: 520, idealWidth: 660, maxWidth: .infinity, minHeight: 380, idealHeight: 520, maxHeight: .infinity)
     }
 }
 

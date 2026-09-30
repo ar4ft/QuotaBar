@@ -33,6 +33,7 @@ jobs:
           test -x dist/QuotaBar.app/Contents/MacOS/QuotaBar
           lipo dist/QuotaBar.app/Contents/MacOS/QuotaBar -verify_arch arm64 x86_64
           test -s dist/QuotaBar-macOS.dmg
+          test -s dist/QuotaBar.app/Contents/Resources/QuotaBar.icns
           test -f dist/QuotaBar.app/Contents/Frameworks/Sparkle.framework/Sparkle
           test ! -d dist/QuotaBar.app/Contents/_CodeSignature
           binary_signature="$(codesign --display --verbose=4 dist/QuotaBar.app/Contents/MacOS/QuotaBar 2>&1 || true)"
@@ -52,6 +53,21 @@ jobs:
           kill "$app_process"
           wait "$app_process" || true
           unzip -tq dist/QuotaBar-macOS.zip
+      - name: Render native appearance previews
+        run: |
+          dist/QuotaBar.app/Contents/MacOS/QuotaBar --render-previews dist/previews
+          test -s dist/previews/dashboard-light.png
+          test -s dist/previews/dashboard-dark.png
+          test -s dist/previews/dashboard-high-contrast.png
+          test -s dist/previews/dashboard-compact.png
+      - name: Publish UI previews
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuotaBar-UI-Previews
+          path: |
+            dist/previews/*.png
+            dist/QuotaBar-icon.png
+          if-no-files-found: error
       - name: Publish macOS app artifact
         uses: actions/upload-artifact@v4
         with:
