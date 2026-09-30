@@ -33,5 +33,6 @@ PLIST
 # Ad-hoc signing for local development. Set SIGNING_IDENTITY for Developer ID distribution.
 codesign --force --options runtime --sign "${SIGNING_IDENTITY:--}" "$bundle_dir"
 codesign --verify --strict "$bundle_dir"
+ditto -c -k --sequesterRsrc --keepParent "$bundle_dir" "$project_dir/dist/QuotaBar-macOS.zip"
 echo "Built $bundle_dir"
 echo "Run: open '$bundle_dir'"

@@ -17,4 +17,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: QuotaBar-macOS
-          path: dist/QuotaBar.app
+          path: dist/QuotaBar-macOS.zip

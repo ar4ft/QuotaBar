@@ -20,7 +20,7 @@ cd QuotaBar
 open dist/QuotaBar.app
 ```
 
-You can also open `Package.swift` in Xcode and run the `QuotaBar` executable scheme. The script builds and ad-hoc signs a `.app` bundle for local use. It does not notarize the app. Distribution needs your own bundle identity, Developer ID signature and notarization. Rebuilding an ad-hoc signed app may prompt for Keychain access again.
+You can also open `Package.swift` in Xcode and run the `QuotaBar` executable scheme. The script builds and ad-hoc signs a `.app` bundle for local use and creates `dist/QuotaBar-macOS.zip`, preserving executable permissions for download. It does not notarize the app. Distribution needs your own bundle identity, Developer ID signature and notarization. Rebuilding an ad-hoc signed app may prompt for Keychain access again.
 
 To test:
 
@@ -28,7 +28,7 @@ To test:
 swift test
 ```
 
-The included GitHub Actions workflow compiles the macOS app, runs tests, and packages the app when used in a repository. It has not been run in this workspace.
+The included GitHub Actions workflow compiles the macOS app, runs tests, and packages the app when used in a repository. The first repository workflow run passed macOS compilation, all 18 tests, and app packaging.
 
 ## Connect OpenAI
 
@@ -77,7 +77,7 @@ Missing windows remain unknown, never fabricated as 0%. Percentages reflect the 
 
 Swift is sufficient for all of these responsibilities. Rust would add a second toolchain and an FFI boundary without helping this app's current workload.
 
-The core's 18 tests pass on Swift 6.0.3/Linux. Swift source syntax parsing also passes. Linux compiles only the app's unsupported-platform fallback; it cannot validate SwiftUI, WebKit, Keychain, or macOS UI behavior. The macOS workflow and the following smoke checks are provided for the remaining validation.
+The core's 18 tests pass on Swift 6.0.3/Linux and on the repository's macOS runner. Swift source syntax parsing also passes. Linux compiles only the app's unsupported-platform fallback; it cannot validate SwiftUI, WebKit, Keychain, or macOS UI behavior. The repository workflow has also passed compilation, all 18 tests, and bundle packaging on macOS. Live authentication, Keychain behavior, and visual UI behavior still require the following smoke checks.
 
 ### macOS smoke checks
 
