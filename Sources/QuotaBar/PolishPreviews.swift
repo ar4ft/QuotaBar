@@ -50,8 +50,7 @@ struct PolishPreviews {
                               backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: appearance)
         window.isReleasedWhenClosed = false
-        let hosting = NSHostingView(rootView: view.environment(\.colorScheme, dark ? .dark : .light)
-            .environment(\.colorSchemeContrast, contrast ? .increased : .standard))
+        let hosting = NSHostingView(rootView: view.environment(\.colorScheme, dark ? .dark : .light))
         hosting.frame = NSRect(origin: .zero, size: size)
         window.contentView = hosting
         window.makeKeyAndOrderFront(nil)
@@ -60,7 +59,7 @@ struct PolishPreviews {
         window.displayIfNeeded()
         guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { throw CocoaError(.fileWriteUnknown) }
         hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
-        guard let png = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
+        guard let png = bitmap.representation(using: NSBitmapImageRep.FileType.png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
         try png.write(to: directory.appendingPathComponent(name + ".png"))
         window.close()
     }
