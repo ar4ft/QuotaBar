@@ -28,7 +28,7 @@ struct AccountStatusLabel: View {
 }
 
 struct AccountSurface: ViewModifier {
-    @Environment(\.accessibilityContrast) private var contrast
+    @Environment(\.colorSchemeContrast) private var contrast
     func body(content: Content) -> some View {
         content.background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12)

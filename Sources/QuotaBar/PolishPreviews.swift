@@ -51,8 +51,7 @@ struct PolishPreviews {
         window.appearance = NSAppearance(named: appearance)
         window.isReleasedWhenClosed = false
         let hosting = NSHostingView(rootView: view.environment(\.colorScheme, dark ? .dark : .light)
-            .environment(\.accessibilityContrast, contrast ? .increased : .normal)
-            .environment(\.accessibilityReduceMotion, true).environment(\.accessibilityReduceTransparency, true))
+            .environment(\.colorSchemeContrast, contrast ? .increased : .standard))
         hosting.frame = NSRect(origin: .zero, size: size)
         window.contentView = hosting
         window.makeKeyAndOrderFront(nil)
