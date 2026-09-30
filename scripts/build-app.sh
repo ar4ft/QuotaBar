@@ -12,7 +12,7 @@ binary_dir="$(xcrun swift build -c release --arch arm64 --arch x86_64 --show-bin
 bundle_dir="$project_dir/dist/QuotaBar.app"
 mkdir -p "$bundle_dir/Contents/MacOS" "$bundle_dir/Contents/Resources"
 cp "$binary_dir/QuotaBar" "$bundle_dir/Contents/MacOS/QuotaBar"
-lipo -verify_arch arm64 x86_64 "$bundle_dir/Contents/MacOS/QuotaBar"
+lipo "$bundle_dir/Contents/MacOS/QuotaBar" -verify_arch arm64 x86_64
 cat > "$bundle_dir/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

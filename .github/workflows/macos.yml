@@ -19,7 +19,7 @@ jobs:
       - name: Validate distributable
         run: |
           test -x dist/QuotaBar.app/Contents/MacOS/QuotaBar
-          lipo -verify_arch arm64 x86_64 dist/QuotaBar.app/Contents/MacOS/QuotaBar
+          lipo dist/QuotaBar.app/Contents/MacOS/QuotaBar -verify_arch arm64 x86_64
           test -s dist/QuotaBar-macOS.dmg
           unzip -tq dist/QuotaBar-macOS.zip
       - name: Publish macOS app artifact
