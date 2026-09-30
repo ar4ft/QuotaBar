@@ -65,6 +65,9 @@ struct UsageHistoryView: View {
                                        description: Text("QuotaBar records successful refreshes. There are no recorded samples for this window and time range yet."))
                     .frame(maxWidth: .infinity, minHeight: 280)
             } else {
+                if store.errors[account.id] == nil, let forecast = UsageForecast.estimate(samples, windowID: selectedWindow, now: store.clock) {
+                    ForecastSummary(forecast: forecast)
+                }
                 Chart(points) { point in
                     LineMark(x: .value("Time", point.observedAt), y: .value("Used", point.usedPercent),
                              series: .value("Continuous observations", point.segment))
@@ -76,7 +79,7 @@ struct UsageHistoryView: View {
                 .chartYAxis { AxisMarks(values: [0.0, 25.0, 50.0, 75.0, 100.0]) { value in
                     AxisGridLine(); AxisValueLabel { if let percent = value.as(Double.self) { Text("\(Int(percent))%") } }
                 } }
-                .frame(height: 250)
+                .frame(height: 220)
                 .accessibilityLabel("\(account.provider.title) consumption history for \(windows.first(where: { $0.id == selectedWindow })?.title ?? "selected window")")
                 HStack {
                     Text("\(points.count) recorded readings").font(.caption).foregroundStyle(.secondary)

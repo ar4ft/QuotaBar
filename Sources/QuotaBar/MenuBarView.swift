@@ -5,6 +5,7 @@ import QuotaCore
 
 struct MenuBarView: View {
     @EnvironmentObject private var store: AccountStore
+    @EnvironmentObject private var updater: AppUpdater
     @Environment(\.openWindow) private var openWindow
     var body: some View {
         VStack(spacing: 0) {
@@ -66,7 +67,9 @@ struct MenuBarView: View {
                 Button("Open dashboard", action: dashboard)
                 Spacer()
                 Menu {
+                    Button("Connection health…") { dashboard(); store.showConnectionHealth = true }
                     Toggle("Presentation mode", isOn: $store.presentationMode)
+                    Button("Check for Updates…") { updater.check() }.disabled(!updater.canCheck)
                     SettingsLink { Text("Settings…") }
                     Button("Quit QuotaBar") { NSApplication.shared.terminate(nil) }
                 } label: { Image(systemName: "gearshape") }.menuStyle(.borderlessButton).fixedSize()
@@ -84,9 +87,10 @@ struct MenuBarLabel: View {
             HStack(spacing: 5) {
                 Image(systemName: "chart.bar.xaxis")
                 if !store.presentationMode, let account = store.pinnedAccount {
-                    let reading = PinnedAllowance.make(snapshot: account.snapshot, windowID: store.pinnedWindowID,
-                                                       hasError: store.errors[account.id] != nil, now: context.date)
-                    Text(reading.text).monospacedDigit()
+                    let reading = MenuBarReading.make(snapshot: account.snapshot,
+                        mode: MenuBarDisplay(rawValue: store.menuBarDisplayRaw) ?? .allowance, windowID: store.pinnedWindowID,
+                        hasError: store.errors[account.id] != nil, now: context.date)
+                    if let text = reading.text { Text(text).monospacedDigit() }
                 }
                 if !store.refreshing.isEmpty { Text("↻") }
             }
@@ -96,10 +100,11 @@ struct MenuBarLabel: View {
     private func help(now: Date) -> String {
         if store.presentationMode { return "QuotaBar · presentation mode · details hidden" }
         guard let account = store.pinnedAccount else { return "QuotaBar · subscription usage" }
-        let reading = PinnedAllowance.make(snapshot: account.snapshot, windowID: store.pinnedWindowID,
-                                           hasError: store.errors[account.id] != nil, now: now)
-        return "\(account.name) · \(reading.windowTitle ?? "No reading") · \(reading.text)" +
-            (reading.isStale ? " · last reading; refresh to confirm" : "")
+        let reading = MenuBarReading.make(snapshot: account.snapshot,
+            mode: MenuBarDisplay(rawValue: store.menuBarDisplayRaw) ?? .allowance, windowID: store.pinnedWindowID,
+            hasError: store.errors[account.id] != nil, now: now)
+        if store.menuBarDisplayRaw == MenuBarDisplay.iconOnly.rawValue { return "QuotaBar · subscription usage" }
+        return "\(account.name) · \(reading.detail)"
     }
 }
 #endif

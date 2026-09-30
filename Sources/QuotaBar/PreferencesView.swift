@@ -5,6 +5,8 @@ import QuotaCore
 
 struct PreferencesView: View {
     @EnvironmentObject private var store: AccountStore
+    @EnvironmentObject private var shortcut: GlobalShortcut
+    @EnvironmentObject private var updater: AppUpdater
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var login = LaunchAtLogin()
     @State private var alertAccountID = ""
@@ -31,9 +33,25 @@ struct PreferencesView: View {
                 Text("Move QuotaBar.app to Applications before enabling launch at login.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Keyboard shortcut") {
+                Toggle("Open dashboard from any app", isOn: $store.shortcutEnabled)
+                HStack {
+                    Picker("Modifiers", selection: $store.shortcutModifiersRaw) {
+                        ForEach(ShortcutModifiers.allCases) { Text($0.title).tag($0.rawValue) }
+                    }
+                    Picker("Key", selection: $store.shortcutLetter) {
+                        ForEach(Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map(String.init), id: \.self) { Text($0).tag($0) }
+                    }.frame(width: 100)
+                }.disabled(!store.shortcutEnabled)
+                if let error = shortcut.error { Text(error).font(.caption).foregroundStyle(.orange) }
+                Text("Default: Control + Option + Q. No Accessibility permission is needed.").font(.caption).foregroundStyle(.secondary)
+            }
             Section("Menu bar") {
+                Picker("Display", selection: $store.menuBarDisplayRaw) {
+                    ForEach(MenuBarDisplay.allCases) { Text($0.title).tag($0.rawValue) }
+                }
                 Picker("Pinned account", selection: Binding(get: { store.pinnedAccountID }, set: { store.pinAccount($0) })) {
-                    Text("Icon only").tag("")
+                    Text("No pinned account").tag("")
                     ForEach(store.accounts) { Text(store.presentationMode ? $0.provider.title + " account" : "\($0.name) · \($0.provider.title)").tag($0.id.uuidString) }
                 }
                 if let account = store.pinnedAccount {
@@ -45,8 +63,21 @@ struct PreferencesView: View {
                         }
                     }
                 }
-                Text("Shows remaining allowance beside the menu bar icon. A ~ marks a stale reading; — means no reading or a reset awaiting confirmation.")
+                Text("Shows your selected reading beside the menu bar icon. Credits are reported for eligible OpenAI accounts; missing balances remain unknown. A ~ marks a stale reading; — means no reading or a reset awaiting confirmation.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Updates") {
+                if updater.configured {
+                    Toggle("Automatically check for updates", isOn: Binding(get: { updater.automaticChecks }, set: updater.setAutomaticChecks))
+                    Toggle("Automatically download updates", isOn: Binding(get: { updater.automaticDownloads }, set: updater.setAutomaticDownloads))
+                        .disabled(!updater.automaticChecks)
+                    Button("Check for Updates…", action: updater.check).disabled(!updater.canCheck)
+                    Text("Updates use a signed feed and signed downloads. Installation is handled by Sparkle.").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("Automatic updates are available in signed release builds. This development artifact has no configured update signing key.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Link("Open QuotaBar downloads", destination: URL(string: "https://github.com/ar4ft/QuotaBar/releases")!)
+                }
             }
             Section("Usage alerts") {
                 Toggle("Enable usage notifications", isOn: Binding(get: { store.notificationsEnabled }, set: { value in

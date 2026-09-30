@@ -1,0 +1,105 @@
+name: Signed macOS release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag matching the app version
+        required: true
+        default: v0.5.0
+        type: string
+      publish:
+        description: Publish signed installers and update feed as a GitHub Release
+        default: false
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: signed-macos-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: macos-15
+    environment: release
+    permissions:
+      contents: write
+    env:
+      APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      UPDATE_PUBLIC_KEY: ${{ secrets.SPARKLE_PUBLIC_KEY }}
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      NOTARY_KEYCHAIN_PROFILE: QuotaBar-notary
+      NOTARY_KEYCHAIN_PATH: ${{ runner.temp }}/QuotaBar-release.keychain-db
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate release configuration
+        run: |
+          python3 - <<'PY'
+          import os, re
+          required = ['APPLE_CERTIFICATE_P12_BASE64', 'APPLE_CERTIFICATE_PASSWORD', 'SIGNING_IDENTITY',
+                      'APPLE_ID', 'APPLE_APP_PASSWORD', 'APPLE_TEAM_ID', 'UPDATE_PUBLIC_KEY', 'SPARKLE_PRIVATE_KEY']
+          missing = [name for name in required if not os.environ.get(name)]
+          if missing:
+              raise SystemExit('Configure release secrets: ' + ', '.join(missing))
+          if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', os.environ['RELEASE_TAG']):
+              raise SystemExit('Release tag must be vMAJOR.MINOR.PATCH.')
+          if not os.environ['SIGNING_IDENTITY'].startswith('Developer ID Application:'):
+              raise SystemExit('APPLE_SIGNING_IDENTITY must be a Developer ID Application identity.')
+          PY
+      - name: Prepare temporary signing keychain
+        run: |
+          set -euo pipefail
+          signing_keychain="$RUNNER_TEMP/QuotaBar-release.keychain-db"
+          keychain_password="$(openssl rand -base64 32)"
+          echo "::add-mask::$keychain_password"
+          printf '%s' "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/QuotaBar-certificate.p12"
+          chmod 600 "$RUNNER_TEMP/QuotaBar-certificate.p12"
+          security create-keychain -p "$keychain_password" "$signing_keychain"
+          security set-keychain-settings -lut 21600 "$signing_keychain"
+          security unlock-keychain -p "$keychain_password" "$signing_keychain"
+          security import "$RUNNER_TEMP/QuotaBar-certificate.p12" -k "$signing_keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$signing_keychain"
+          security list-keychains -d user -s "$signing_keychain" login.keychain-db
+          xcrun notarytool store-credentials "$NOTARY_KEYCHAIN_PROFILE" --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --keychain "$signing_keychain"
+      - name: Test and compile
+        run: xcrun swift test
+      - name: Sign, notarize, and package
+        run: ./scripts/build-app.sh
+      - name: Sign update archive and feed
+        run: python3 scripts/create-appcast.py "$RELEASE_TAG"
+      - name: Verify release installers
+        run: |
+          codesign --verify --deep --strict dist/QuotaBar.app
+          xcrun stapler validate dist/QuotaBar.app
+          xcrun stapler validate dist/QuotaBar-macOS.dmg
+          lipo dist/QuotaBar.app/Contents/MacOS/QuotaBar -verify_arch arm64 x86_64
+          unzip -tq dist/QuotaBar-macOS.zip
+      - name: Upload signed release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuotaBar-macOS-signed
+          path: |
+            dist/QuotaBar-macOS.zip
+            dist/QuotaBar-macOS.dmg
+            dist/appcast.xml
+          if-no-files-found: error
+      - name: Publish GitHub Release
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" dist/QuotaBar-macOS.zip dist/QuotaBar-macOS.dmg dist/appcast.xml \
+            --target "$GITHUB_SHA" --title "QuotaBar $RELEASE_TAG" --generate-notes --latest
+      - name: Remove temporary signing material
+        if: always()
+        run: |
+          security list-keychains -d user -s login.keychain-db
+          if [[ -f "$RUNNER_TEMP/QuotaBar-release.keychain-db" ]]; then
+            security delete-keychain "$RUNNER_TEMP/QuotaBar-release.keychain-db"
+          fi
+          rm -f "$RUNNER_TEMP/QuotaBar-certificate.p12"

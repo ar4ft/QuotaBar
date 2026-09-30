@@ -21,6 +21,15 @@ jobs:
           test -x dist/QuotaBar.app/Contents/MacOS/QuotaBar
           lipo dist/QuotaBar.app/Contents/MacOS/QuotaBar -verify_arch arm64 x86_64
           test -s dist/QuotaBar-macOS.dmg
+          test -f dist/QuotaBar.app/Contents/Frameworks/Sparkle.framework/Sparkle
+          codesign --verify --deep --strict dist/QuotaBar.app
+          otool -L dist/QuotaBar.app/Contents/MacOS/QuotaBar
+          dist/QuotaBar.app/Contents/MacOS/QuotaBar &
+          app_process=$!
+          sleep 3
+          kill -0 "$app_process"
+          kill "$app_process"
+          wait "$app_process" || true
           unzip -tq dist/QuotaBar-macOS.zip
       - name: Publish macOS app artifact
         uses: actions/upload-artifact@v4

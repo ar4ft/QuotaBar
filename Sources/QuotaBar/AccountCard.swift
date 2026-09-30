@@ -8,6 +8,7 @@ struct AccountCard: View {
     let refreshing: Bool
     let showRemaining: Bool
     let presentationMode: Bool
+    let forecast: UsageForecast?
     let availability: AccountAvailability
     let history: () -> Void
     let refresh: () -> Void
@@ -56,6 +57,7 @@ struct AccountCard: View {
                 Text(refreshing ? "Reading subscription usage…" : "No usage reading yet")
                     .font(.callout).foregroundStyle(.secondary).padding(.vertical, 14)
             }
+            if let forecast { ForecastSummary(forecast: forecast) }
             if let error {
                 VStack(alignment: .leading, spacing: 8) {
                     Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)

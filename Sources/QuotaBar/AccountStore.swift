@@ -9,6 +9,7 @@ final class AccountStore: ObservableObject {
     @Published private(set) var refreshing: Set<UUID> = []
     @Published private(set) var errors: [UUID: String] = [:]
     @Published var globalError: String?
+    @Published var showConnectionHealth = false
     @Published var presentedConnection: ConnectionRequest?
     @AppStorage("refreshMinutes") var refreshMinutes = 5 { willSet { objectWillChange.send() } }
     @AppStorage("presentationMode") var presentationMode = false {
@@ -18,6 +19,11 @@ final class AccountStore: ObservableObject {
     @AppStorage("showRemaining") var showRemaining = false { willSet { objectWillChange.send() } }
     @AppStorage("notificationsEnabled") var notificationsEnabled = false { willSet { objectWillChange.send() } }
     @AppStorage("pinnedAccountID") var pinnedAccountID = "" { willSet { objectWillChange.send() } }
+    @AppStorage("menuBarDisplay") var menuBarDisplayRaw = MenuBarDisplay.allowance.rawValue { willSet { objectWillChange.send() } }
+    @AppStorage("shortcutEnabled") var shortcutEnabled = true { willSet { objectWillChange.send() } }
+    @AppStorage("shortcutLetter") var shortcutLetter = "Q" { willSet { objectWillChange.send() } }
+    @AppStorage("shortcutModifiers") var shortcutModifiersRaw = ShortcutModifiers.controlOption.rawValue { willSet { objectWillChange.send() } }
+    @Published private(set) var connectionIssues: [UUID: ConnectionIssue] = [:]
     @AppStorage("pinnedWindowID") var pinnedWindowID = "" { willSet { objectWillChange.send() } }
     @Published private(set) var notificationAuthorization: UNAuthorizationStatus = .notDetermined
     @Published private(set) var requestingNotificationPermission = false
@@ -38,6 +44,16 @@ final class AccountStore: ObservableObject {
     func availability(_ account: Account) -> AccountAvailability {
         AccountAvailability.make(account, hasError: errors[account.id] != nil, now: clock)
     }
+    func health(_ account: Account) -> ConnectionHealth {
+        ConnectionHealth.make(snapshot: account.snapshot, issue: connectionIssues[account.id], now: clock)
+    }
+    func forecast(_ account: Account) -> UsageForecast? {
+        guard errors[account.id] == nil,
+              let window = AccountAvailability.mainWindows(account).max(by: { $0.usedPercent < $1.usedPercent }) else { return nil }
+        return UsageForecast.estimate(histories[account.id] ?? [], windowID: window.id, now: clock)
+    }
+    var attentionCount: Int { accounts.filter { health($0).needsAttention }.count }
+    func retryDate(_ id: UUID) -> Date? { cooldowns[id] }
     let root: URL
     private let vault = KeychainVault()
     private let client = UsageClient()
@@ -111,7 +127,7 @@ final class AccountStore: ObservableObject {
             else { try? vault.remove(id: account.id) }
             throw error
         }
-        epoch[account.id] = UUID(); cooldowns[account.id] = nil; resetCreditCooldowns[account.id] = nil; errors[account.id] = nil
+        epoch[account.id] = UUID(); cooldowns[account.id] = nil; resetCreditCooldowns[account.id] = nil; errors[account.id] = nil; connectionIssues[account.id] = nil
         // Wait for an older request to finish before refreshing the replacement.
         while refreshing.contains(account.id) { try await Task.sleep(for: .milliseconds(100)) }
         await refresh(account.id)
@@ -129,7 +145,7 @@ final class AccountStore: ObservableObject {
         do {
             try persist()
             try vault.remove(id: id)
-            errors[id] = nil; cooldowns[id] = nil; resetCreditCooldowns[id] = nil; epoch[id] = nil
+            errors[id] = nil; connectionIssues[id] = nil; cooldowns[id] = nil; resetCreditCooldowns[id] = nil; epoch[id] = nil
             if pinnedAccountID == id.uuidString { pinAccount("") }
             resetAttempts[id] = nil; histories[id] = nil; historyErrors[id] = nil
             Task {
@@ -186,7 +202,7 @@ final class AccountStore: ObservableObject {
             accounts[index].creditAlertState = evaluation.creditState
             do { try persist() }
             catch { accounts[index] = previous; throw error }
-            errors[id] = nil; cooldowns[id] = nil
+            errors[id] = nil; connectionIssues[id] = nil; cooldowns[id] = nil
             if let boundary = ResetRefreshPolicy.expiredBoundary(snapshot, now: Date()) {
                 if resetAttempts[id]?.boundary != boundary {
                     resetAttempts[id] = ResetRefreshPolicy.record(boundary: boundary, previous: nil, now: Date())
@@ -203,6 +219,7 @@ final class AccountStore: ObservableObject {
         } catch {
             guard epoch[id] == generation else { return }
             errors[id] = error.localizedDescription
+            connectionIssues[id] = ConnectionIssue.classify(error)
             if case QuotaError.rateLimited(let until) = error { cooldowns[id] = until }
         }
     }

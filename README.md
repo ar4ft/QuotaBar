@@ -1,6 +1,6 @@
 # QuotaBar
 
-A native macOS app for keeping multiple OpenAI and Claude subscription accounts in view. Written in Swift, with a SwiftUI dashboard and menu bar popover. macOS 14+, Xcode 16+. No external package dependencies.
+A native macOS app for keeping multiple OpenAI and Claude subscription accounts in view. Written in Swift, with a SwiftUI dashboard and menu bar popover. macOS 14+, Xcode 16+. The app uses the pinned Sparkle 2.9.6 framework for signed automatic updates; the core has no external dependencies.
 
 ## What it does
 
@@ -27,7 +27,7 @@ cd QuotaBar
 open dist/QuotaBar.app
 ```
 
-You can also open `Package.swift` in Xcode and run the `QuotaBar` executable scheme. The script builds and ad-hoc signs a universal `.app` bundle (Apple Silicon + Intel), creates `dist/QuotaBar-macOS.zip` preserving executable permissions, and builds `dist/QuotaBar-macOS.dmg` with an Applications shortcut. It does not notarize the app. Distribution needs your own bundle identity, Developer ID signature and notarization. Rebuilding an ad-hoc signed app may prompt for Keychain access again.
+You can also open `Package.swift` in Xcode and run the `QuotaBar` executable scheme. The script builds and ad-hoc signs a universal `.app` bundle (Apple Silicon + Intel), creates `dist/QuotaBar-macOS.zip` preserving executable permissions, and builds `dist/QuotaBar-macOS.dmg` with an Applications shortcut. Normal CI artifacts use ad-hoc signing. The optional signed-release workflow uses your Developer ID certificate and Apple notarization credentials. Rebuilding an ad-hoc signed app may prompt for Keychain access again.
 
 To test:
 
@@ -121,7 +121,7 @@ Missing windows remain unknown, never fabricated as 0%. Percentages reflect the 
 
 Swift is sufficient for all of these responsibilities. Rust would add a second toolchain and an FFI boundary without helping this app's current workload.
 
-The expanded core suite has 65 tests covering alert persistence and deduplication, confirmed resets, disabled preferences, metadata migration, and pinned allowance behavior in addition to provider parsing and requests. All 65 pass on Swift 6.0.3/Linux. Swift source syntax parsing also passes. Linux compiles only the app's unsupported-platform fallback; it cannot validate SwiftUI, WebKit, Keychain, or macOS UI behavior. The repository workflow compiles the macOS app, runs the full test suite, validates both executable architectures, the ZIP and DMG, and publishes both installers as the app artifact. Live authentication, Keychain behavior, and visual UI behavior still require the following smoke checks.
+The expanded core suite has 79 tests covering alert persistence and deduplication, confirmed resets, disabled preferences, metadata migration, and pinned allowance behavior in addition to provider parsing and requests. All 79 pass on Swift 6.0.3/Linux. Swift source syntax parsing also passes. Linux compiles only the app's unsupported-platform fallback; it cannot validate SwiftUI, WebKit, Keychain, or macOS UI behavior. The repository workflow compiles the macOS app, runs the full test suite, validates both executable architectures, the ZIP and DMG, and publishes both installers as the app artifact. Live authentication, Keychain behavior, and visual UI behavior still require the following smoke checks.
 
 ### macOS smoke checks
 
@@ -152,3 +152,36 @@ Provider endpoint and credential format research used the open-source [CodexBar]
 The new implementation is independent Swift code. Codex Fuel Companion was reviewed for feature ideas; none of its restricted source or artwork was copied.
 
 Additional Mac smoke checks: enable presentation mode while dashboard, menu, history, and Settings are open; verify identities and balances disappear, tooltips reveal no labels, CSV export is unavailable, and notifications stop. Restore normal mode, verify custom thresholds persist, and check credit inventory against a real eligible OpenAI account. These provider and OS interactions need a Mac and live accounts.
+
+### Version 0.5: daily-use tools and release infrastructure
+
+- **Menu-bar display:** choose remaining percentage, reset countdown, credit balance, or icon only in Settings → Menu bar. Pin an account independently of its display mode. Percentage and countdown use the selected window or the most constrained window. Stale readings get `~`; missing credit amounts stay unknown; elapsed reset times show **Due**, never synthetic refills. Presentation mode hides all readings and account tooltips.
+- **Global shortcut:** Control + Option + Q opens/activates the dashboard from any app. Settings offers A–Z keys and Control+Option, Command+Shift, or Control+Option+Command modifiers. It can be disabled. macOS registration conflicts appear in Settings. This uses the native hot-key API, without Accessibility or Input Monitoring permissions. Letter choices refer to ANSI physical key positions; a non-US keyboard layout may label that key differently.
+- **Connection health:** open the unified view from the dashboard or menu settings. It shows sessions needing reconnection, failed/stale readings, provider cooldowns, and each account's last successful refresh. Exhausted allowance is not classified as a broken connection. Authentication errors clear after a successful reconnect/refresh. Presentation mode hides this view's details.
+- **Usage pace:** account cards and history show estimates from observed percentage changes, separate from availability and alerts. Estimates require at least three fresh, continuous readings spanning 30 minutes, at least two percentage points of consumption, and a known upcoming reset. A decrease, missing window, changed reset, or gap over an hour breaks the evidence. At most six hours are considered. Linear estimates disappear when readings become stale, quota is exhausted, or evidence is insufficient. They are not token counts, promises, or provider data; work intensity can change.
+- **Automatic updates:** Sparkle performs manual checks, optional scheduled checks/downloads, signature verification, and installation in update-enabled signed release builds. The feed and ZIP are Ed25519-signed, HTTPS is required, and updates are verified before extraction. Checking/downloading is opt-in in Settings. System-profile reporting is disabled. Development artifacts deliberately omit a feed/public key and expose a downloads link instead. Framework resources and its license are bundled; no Rust runtime is introduced.
+
+### Activate signed distribution and updates
+
+The implementation and workflow are ready to review, but no signed/notarized release or live update feed has been produced by this session. Apple/Sparkle private signing credentials are not available in the execution environment; this session's GitHub integration cannot inspect Actions secrets. Ordinary macOS ZIP/DMG artifacts remain downloadable.
+
+Create repository or `release` environment secrets in GitHub Settings → Secrets and variables → Actions:
+
+| Secret | Purpose |
+| --- | --- |
+| `APPLE_CERTIFICATE_P12_BASE64` | Base64 export of your Developer ID Application certificate **including its private key** |
+| `APPLE_CERTIFICATE_PASSWORD` | Password protecting that P12 export |
+| `APPLE_SIGNING_IDENTITY` | Full `Developer ID Application: … (TEAMID)` identity |
+| `APPLE_ID` | Apple developer account used for notarization |
+| `APPLE_APP_PASSWORD` | Apple app-specific password for notarization |
+| `APPLE_TEAM_ID` | Developer team identifier |
+| `SPARKLE_PUBLIC_KEY` | Public Ed25519 key printed by Sparkle `generate_keys` |
+| `SPARKLE_PRIVATE_KEY` | Base64 exported key from Sparkle `generate_keys -x`; retain it privately |
+
+Do not commit private keys or passwords. Keep a backup of the Sparkle key so existing installations can trust future releases.
+
+Run **Actions → Signed macOS release → Run workflow**, with a tag matching the bundle version (currently `v0.5.0`). The default **publish=false** creates a `QuotaBar-macOS-signed` artifact with notarized ZIP/DMG and signed `appcast.xml`. Inspect that artifact first. Set **publish=true** for a subsequent run when ready to publish a GitHub Release; it creates the tag at the built commit, uploads the three files, and marks that release latest. Publishing uses the GitHub workflow token. No release is published by the normal push/PR workflow.
+
+The app uses `https://github.com/ar4ft/QuotaBar/releases/latest/download/appcast.xml`. A release must have both that feed and its signed ZIP available. `CFBundleVersion` must increase for every update. Publishing a non-update-enabled release as latest would interrupt that feed; use this workflow for public releases. The script validates matching public/private keys and the release tag, signs nested framework helpers, notarizes/staples the app and DMG, and deletes the temporary signing keychain and certificate afterward. Notarization and an end-to-end older-version update still need validation with your credentials.
+
+Additional Mac smoke checks: test each display mode and privacy override; trigger the global shortcut with another app focused, change/disable it, and check conflict reporting; inspect connection health after an expired session and recovery. Confirm forecasts match a known history series and disappear for stale/reset data. For a configured signed release, enable update checks, test a higher build number from the signed feed, and verify that unsigned or tampered updates are refused. CI also launches the packaged development app briefly to catch missing embedded-framework or signing failures; it does not simulate these interactions.

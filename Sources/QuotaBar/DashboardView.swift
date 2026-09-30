@@ -56,6 +56,12 @@ struct DashboardView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
                     header
+                    Button {
+                        store.showConnectionHealth = true
+                    } label: {
+                        Label(store.presentationMode ? "Connection health" : "Connection health · \(store.attentionCount) need attention",
+                              systemImage: "network")
+                    }.buttonStyle(.plain).foregroundStyle(.secondary)
                     HStack(spacing: 16) {
                         MetricTile(title: "CONNECTED", value: "\(filtered.count)", detail: "subscription accounts", symbol: "person.2")
                         MetricTile(title: "AVAILABLE", value: store.presentationMode ? "—" : "\(filtered.filter { store.availability($0).status.isAvailable }.count)", detail: "accounts with allowance left", symbol: "checkmark.circle")
@@ -104,6 +110,7 @@ struct DashboardView: View {
             if hidden { search = ""; availableOnly = false; renameAccount = nil; deleting = nil; historyAccount = nil }
         }
         .sheet(item: $store.presentedConnection) { request in ConnectAccountView(request: request).environmentObject(store) }
+        .sheet(isPresented: $store.showConnectionHealth) { ConnectionHealthView().environmentObject(store) }
         .sheet(item: $historyAccount) { account in UsageHistoryView(account: account).environmentObject(store) }
         .alert("Rename account", isPresented: Binding(get: { renameAccount != nil }, set: { if !$0 { renameAccount = nil } })) {
             TextField("Account name", text: $newName)
@@ -141,7 +148,7 @@ struct DashboardView: View {
     }
     private func card(_ account: Account) -> some View {
         AccountCard(account: account, error: store.errors[account.id], refreshing: store.refreshing.contains(account.id),
-                    showRemaining: store.showRemaining, presentationMode: store.presentationMode, availability: store.availability(account),
+                    showRemaining: store.showRemaining, presentationMode: store.presentationMode, forecast: store.forecast(account), availability: store.availability(account),
                     history: { historyAccount = account },
                     refresh: { Task { await store.refresh(account.id) } }, reconnect: { store.connect(account) },
                     rename: { newName = account.name; renameAccount = account }, remove: { deleting = account })
