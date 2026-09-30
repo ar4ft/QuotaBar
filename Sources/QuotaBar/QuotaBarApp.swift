@@ -19,8 +19,7 @@ struct QuotaBarApp: App {
         MenuBarExtra {
             MenuBarView().environmentObject(store).task { store.start() }
         } label: {
-            Image(systemName: "chart.bar.xaxis")
-            if !store.refreshing.isEmpty { Text("↻") }
+            MenuBarLabel().environmentObject(store)
         }.menuBarExtraStyle(.window)
         Settings { PreferencesView().environmentObject(store) }
     }

@@ -1,6 +1,7 @@
 #if os(macOS)
 import SwiftUI
 import QuotaCore
+import UserNotifications
 
 @MainActor
 final class AccountStore: ObservableObject {
@@ -9,8 +10,17 @@ final class AccountStore: ObservableObject {
     @Published private(set) var errors: [UUID: String] = [:]
     @Published var globalError: String?
     @Published var presentedConnection: ConnectionRequest?
-    @AppStorage("refreshMinutes") var refreshMinutes = 5
-    @AppStorage("showRemaining") var showRemaining = false
+    @AppStorage("refreshMinutes") var refreshMinutes = 5 { willSet { objectWillChange.send() } }
+    @AppStorage("showRemaining") var showRemaining = false { willSet { objectWillChange.send() } }
+    @AppStorage("notificationsEnabled") var notificationsEnabled = false { willSet { objectWillChange.send() } }
+    @AppStorage("pinnedAccountID") var pinnedAccountID = "" { willSet { objectWillChange.send() } }
+    @AppStorage("pinnedWindowID") var pinnedWindowID = "" { willSet { objectWillChange.send() } }
+    @Published private(set) var notificationAuthorization: UNAuthorizationStatus = .notDetermined
+    @Published private(set) var requestingNotificationPermission = false
+    @Published var notificationError: String?
+    private let notifications = UsageNotifications()
+    var pinnedAccount: Account? { accounts.first { $0.id.uuidString == pinnedAccountID } }
+    var notificationsAuthorized: Bool { notificationAuthorization == .authorized || notificationAuthorization == .provisional }
     let root: URL
     private let vault = KeychainVault()
     private let client = UsageClient()
@@ -39,6 +49,7 @@ final class AccountStore: ObservableObject {
     func start() {
         guard timerTask == nil else { return }
         timerTask = Task { [weak self] in
+            await self?.refreshNotificationAuthorization()
             await self?.refreshAll()
             while !Task.isCancelled {
                 let minutes = min(60, max(1, self?.refreshMinutes ?? 5))
@@ -54,6 +65,7 @@ final class AccountStore: ObservableObject {
         account.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if account.name.isEmpty { account.name = credential.email ?? provider.title }
         let previous = accounts
+        account.alertPreferences = accounts.first(where: { $0.id == account.id })?.alertPreferences
         let previousCredential = replacing.flatMap { try? vault.load(id: $0) }
         try vault.save(credential, id: account.id)
         if let index = accounts.firstIndex(where: { $0.id == account.id }) { accounts[index] = account }
@@ -84,6 +96,8 @@ final class AccountStore: ObservableObject {
             try persist()
             try vault.remove(id: id)
             errors[id] = nil; cooldowns[id] = nil; epoch[id] = nil
+            if pinnedAccountID == id.uuidString { pinAccount("") }
+            Task { await notifications.removeNotifications(for: id) }
         } catch {
             accounts = previous; try? persist(); globalError = error.localizedDescription
         }
@@ -111,15 +125,53 @@ final class AccountStore: ObservableObject {
                 try vault.save(credential, id: id)
                 snapshot = try await client.fetch(credential)
             }
+            await refreshNotificationAuthorization()
             guard epoch[id] == generation, let index = accounts.firstIndex(where: { $0.id == id }) else { return }
+            let previous = accounts[index]
+            var preferences = previous.effectiveAlertPreferences
+            preferences.enabled = preferences.enabled && notificationsEnabled && notificationsAuthorized
+            let evaluation = UsageAlerts.evaluate(snapshot: snapshot, state: previous.alertState ?? [:], preferences: preferences)
             accounts[index].snapshot = snapshot
+            accounts[index].alertState = evaluation.state
+            do { try persist() }
+            catch { accounts[index] = previous; throw error }
             errors[id] = nil; cooldowns[id] = nil
-            try persist()
+            do { try await notifications.send(evaluation.alerts, account: accounts[index]) }
+            catch { notificationError = "Could not schedule an alert: \(error.localizedDescription)" }
         } catch {
             guard epoch[id] == generation else { return }
             errors[id] = error.localizedDescription
             if case QuotaError.rateLimited(let until) = error { cooldowns[id] = until }
         }
+    }
+    func pinAccount(_ id: String) {
+        pinnedWindowID = ""; pinnedAccountID = id
+    }
+    func updateAlertPreferences(_ id: UUID, change: (inout AlertPreferences) -> Void) {
+        guard let index = accounts.firstIndex(where: { $0.id == id }) else { return }
+        let previous = accounts
+        var preferences = accounts[index].effectiveAlertPreferences
+        change(&preferences); accounts[index].alertPreferences = preferences
+        do { try persist() } catch { accounts = previous; globalError = error.localizedDescription }
+    }
+    func refreshNotificationAuthorization() async {
+        notificationAuthorization = await notifications.authorization()
+    }
+    func setNotificationsEnabled(_ enabled: Bool) async {
+        guard !requestingNotificationPermission else { return }
+        notificationError = nil
+        if !enabled { notificationsEnabled = false; return }
+        requestingNotificationPermission = true
+        defer { requestingNotificationPermission = false }
+        do {
+            await refreshNotificationAuthorization()
+            if notificationAuthorization == .notDetermined {
+                let granted = try await notifications.requestAuthorization()
+                await refreshNotificationAuthorization()
+                notificationsEnabled = granted
+            } else { notificationsEnabled = notificationsAuthorized }
+            if !notificationsEnabled { notificationError = "Allow QuotaBar notifications in System Settings → Notifications, then enable usage alerts." }
+        } catch { notificationError = error.localizedDescription; notificationsEnabled = false }
     }
     private func persist() throws {
         guard writable else { throw CocoaError(.fileWriteNoPermission) }

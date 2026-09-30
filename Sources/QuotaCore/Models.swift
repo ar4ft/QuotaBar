@@ -46,6 +46,9 @@ public struct Account: Codable, Identifiable, Sendable {
     public var detail: String?
     public var snapshot: UsageSnapshot?
     public var addedAt: Date
+    public var alertPreferences: AlertPreferences?
+    public var alertState: [String: WindowAlertState]?
+    public var effectiveAlertPreferences: AlertPreferences { alertPreferences ?? AlertPreferences() }
     public init(id: UUID = UUID(), provider: Provider, name: String, detail: String? = nil) {
         self.id = id; self.provider = provider; self.name = name; self.detail = detail
         self.addedAt = Date()

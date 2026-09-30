@@ -9,6 +9,9 @@ A native macOS app for keeping multiple OpenAI and Claude subscription accounts 
 - See each provider's reported usage percentage and reset countdown, including model-specific windows when available.
 - Check all accounts in the macOS menu bar, even after closing the dashboard window.
 - Refresh manually or periodically; choose usage consumed or allowance remaining in Settings.
+- Get per-account 80% and 95% consumption warnings and confirmed allowance recovery notifications.
+- Pin an account's remaining allowance in the menu bar, choosing a specific window or the most constrained window.
+- Launch automatically when you sign in to macOS, using the system's Login Items registration.
 - Preserve the last reading when a request fails and identify stale readings. Respect `Retry-After` on rate limits.
 - Store credentials in macOS Keychain. Account metadata contains labels, usage snapshots, and timestamps only.
 
@@ -29,6 +32,16 @@ swift test
 ```
 
 The included GitHub Actions workflow compiles the macOS app, runs tests, and packages the app when used in a repository. The first repository workflow run passed macOS compilation, all 18 tests, and app packaging.
+
+## Alerts, pinned allowance, and launch at login
+
+Open **Settings** from the menu bar gear menu.
+
+- **Usage alerts:** enable notifications and accept the macOS notification permission prompt. Configure each account's 80% warning, 95% warning, and allowance recovery alert separately. Alerts are disabled globally until you enable them; per-account defaults enable all three once global notifications are on. macOS Focus and notification settings still control whether a banner is shown.
+- **Pinned allowance:** choose an account and a usage window, or use “Most constrained window.” You can also pin/unpin an account directly in the menu bar popover. The icon shows remaining allowance; `~` marks a stale/error reading or a reset that needs a fresh reading, and `—` means the chosen window has no reading. The dashboard's consumed/remaining preference does not change the pin's meaning.
+- **Launch at login:** move the packaged `QuotaBar.app` into `/Applications`, then enable the toggle. If macOS requires approval, open Login Items from the provided button. The displayed toggle reflects system registration, including changes made in System Settings. A raw Swift package executable cannot register for these OS features.
+
+Warning receipts are saved with account metadata, separately for each window and reset cycle. If a reading jumps past both warning thresholds, only the higher warning is sent. A refresh confirming exhaustion has ended can send a recovery alert; a confirmed new cycle with usage falling from at least 80% can also send one. A countdown alone never sends a recovery alert. Without a reported reset timestamp, threshold/recovery alerts stay deduplicated until a confirmed cycle change or account reconnection. Multiple alerts from one account reading are grouped in one notification. Reconnecting preserves the account's alert preferences; removing the account clears its pin and delivered notifications.
 
 ## Connect OpenAI
 
@@ -77,7 +90,7 @@ Missing windows remain unknown, never fabricated as 0%. Percentages reflect the 
 
 Swift is sufficient for all of these responsibilities. Rust would add a second toolchain and an FFI boundary without helping this app's current workload.
 
-The core's 18 tests pass on Swift 6.0.3/Linux and on the repository's macOS runner. Swift source syntax parsing also passes. Linux compiles only the app's unsupported-platform fallback; it cannot validate SwiftUI, WebKit, Keychain, or macOS UI behavior. The repository workflow has also passed compilation, all 18 tests, and bundle packaging on macOS. Live authentication, Keychain behavior, and visual UI behavior still require the following smoke checks.
+The expanded core suite has 33 tests covering alert persistence and deduplication, confirmed resets, disabled preferences, metadata migration, and pinned allowance behavior in addition to provider parsing and requests. All 33 pass on Swift 6.0.3/Linux. Swift source syntax parsing also passes. Linux compiles only the app's unsupported-platform fallback; it cannot validate SwiftUI, WebKit, Keychain, or macOS UI behavior. The repository workflow compiles the macOS app, runs the full test suite, validates the distributable ZIP, and publishes the app artifact. Live authentication, Keychain behavior, and visual UI behavior still require the following smoke checks.
 
 ### macOS smoke checks
 
@@ -88,6 +101,9 @@ The core's 18 tests pass on Swift 6.0.3/Linux and on the repository's macOS runn
 5. Disconnect the network and refresh. Last readings should remain visible with an error; restoring connectivity should recover.
 6. Quit and relaunch. Accounts should persist, credentials should be in the `com.quotabar.accounts` Keychain service, and `accounts.json` should contain no tokens/cookies.
 7. Remove an account and verify its QuotaBar Keychain item is removed. Test login cancellation and reconnecting an expired imported session.
+8. In Settings, enable notifications. Check that per-account warning toggles persist after relaunch; verify real 80%/95% threshold alerts and confirmed recovery when provider usage changes. Revoking macOS notification permission should be reflected in Settings.
+9. Pin an account/window and confirm the menu bar percentage updates immediately. Reconnect, remove the pinned account, and test a stale/error reading. The icon should not imply unknown allowance is zero.
+10. Move the app to Applications, enable launch at login, and verify it appears in macOS Login Items. Sign out/in to check startup, then disable it and confirm registration is removed.
 
 ## References
 

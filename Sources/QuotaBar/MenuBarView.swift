@@ -32,6 +32,11 @@ struct MenuBarView: View {
                                     Image(systemName: account.provider.symbol).foregroundStyle(account.provider.tint)
                                     Text(account.name).font(.headline).lineLimit(1)
                                     Spacer()
+                                    Button {
+                                        store.pinAccount(store.pinnedAccountID == account.id.uuidString ? "" : account.id.uuidString)
+                                    } label: {
+                                        Image(systemName: store.pinnedAccountID == account.id.uuidString ? "pin.fill" : "pin")
+                                    }.buttonStyle(.plain).help("Pin account allowance in menu bar")
                                     Button { dashboard(); store.connect(account) } label: { Image(systemName: "person.crop.circle.badge.checkmark") }
                                         .buttonStyle(.plain).help("Reconnect \(account.name)")
                                 }
@@ -65,17 +70,28 @@ struct MenuBarView: View {
         openWindow(id: "dashboard"); NSApplication.shared.activate(ignoringOtherApps: true)
     }
 }
-struct PreferencesView: View {
+struct MenuBarLabel: View {
     @EnvironmentObject private var store: AccountStore
     var body: some View {
-        Form {
-            Picker("Refresh accounts every", selection: $store.refreshMinutes) {
-                Text("1 minute").tag(1); Text("5 minutes").tag(5); Text("15 minutes").tag(15); Text("30 minutes").tag(30)
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            HStack(spacing: 5) {
+                Image(systemName: "chart.bar.xaxis")
+                if let account = store.pinnedAccount {
+                    let reading = PinnedAllowance.make(snapshot: account.snapshot, windowID: store.pinnedWindowID,
+                                                       hasError: store.errors[account.id] != nil, now: context.date)
+                    Text(reading.text).monospacedDigit()
+                }
+                if !store.refreshing.isEmpty { Text("↻") }
             }
-            Toggle("Show remaining allowance", isOn: $store.showRemaining)
-            Text("Provider rate-limit backoff overrides the refresh interval. Credentials are stored in macOS Keychain.")
-                .font(.caption).foregroundStyle(.secondary)
-        }.formStyle(.grouped).padding().frame(width: 440)
+            .help(help(now: context.date))
+        }
+    }
+    private func help(now: Date) -> String {
+        guard let account = store.pinnedAccount else { return "QuotaBar · subscription usage" }
+        let reading = PinnedAllowance.make(snapshot: account.snapshot, windowID: store.pinnedWindowID,
+                                           hasError: store.errors[account.id] != nil, now: now)
+        return "\(account.name) · \(reading.windowTitle ?? "No reading") · \(reading.text)" +
+            (reading.isStale ? " · last reading; refresh to confirm" : "")
     }
 }
 #endif
