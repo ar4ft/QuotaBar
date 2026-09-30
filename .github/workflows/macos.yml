@@ -3,6 +3,8 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   verify:
     runs-on: macos-15
@@ -14,7 +16,13 @@ jobs:
         run: xcrun swift test
       - name: Build app bundle
         run: ./scripts/build-app.sh
-      - uses: actions/upload-artifact@v4
+      - name: Validate distributable
+        run: |
+          test -x dist/QuotaBar.app/Contents/MacOS/QuotaBar
+          unzip -tq dist/QuotaBar-macOS.zip
+      - name: Publish macOS app artifact
+        uses: actions/upload-artifact@v4
         with:
           name: QuotaBar-macOS
           path: dist/QuotaBar-macOS.zip
+          if-no-files-found: error
