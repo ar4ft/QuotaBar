@@ -1,4 +1,4 @@
-name: macOS build
+name: macOS development build
 on:
   push:
   pull_request:
@@ -14,15 +14,36 @@ jobs:
         run: xcrun swift --version
       - name: Core tests and app compilation
         run: xcrun swift test
-      - name: Build app bundle
-        run: ./scripts/build-app.sh
+      - name: Verify non-manual signing is rejected
+        run: |
+          if output="$(GITHUB_ACTIONS=true GITHUB_EVENT_NAME=push ./scripts/build-app.sh --signed 2>&1)"; then
+            echo "Automatic signing unexpectedly succeeded." >&2
+            exit 1
+          fi
+          [[ "$output" == *"only for a manually dispatched action"* ]]
+      - name: Build development app without certificate signing
+        env:
+          # Invalid release settings must be ignored in development mode.
+          SIGNING_IDENTITY: development-must-ignore-this
+          UPDATE_PUBLIC_KEY: development-must-ignore-this
+          NOTARY_KEYCHAIN_PROFILE: development-must-ignore-this
+        run: ./scripts/build-app.sh --unsigned
       - name: Validate distributable
         run: |
           test -x dist/QuotaBar.app/Contents/MacOS/QuotaBar
           lipo dist/QuotaBar.app/Contents/MacOS/QuotaBar -verify_arch arm64 x86_64
           test -s dist/QuotaBar-macOS.dmg
           test -f dist/QuotaBar.app/Contents/Frameworks/Sparkle.framework/Sparkle
-          codesign --verify --deep --strict dist/QuotaBar.app
+          test ! -d dist/QuotaBar.app/Contents/_CodeSignature
+          binary_signature="$(codesign --display --verbose=4 dist/QuotaBar.app/Contents/MacOS/QuotaBar 2>&1 || true)"
+          if [[ "$binary_signature" == *"Authority="* ]]; then
+            echo "Development binary unexpectedly has a certificate signature." >&2
+            exit 1
+          fi
+          if /usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' dist/QuotaBar.app/Contents/Info.plist >/dev/null 2>&1; then
+            echo "Development app unexpectedly enables signed updates." >&2
+            exit 1
+          fi
           otool -L dist/QuotaBar.app/Contents/MacOS/QuotaBar
           dist/QuotaBar.app/Contents/MacOS/QuotaBar &
           app_process=$!

@@ -18,6 +18,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: macos-15
     environment: release
     permissions:
@@ -68,7 +69,7 @@ jobs:
       - name: Test and compile
         run: xcrun swift test
       - name: Sign, notarize, and package
-        run: ./scripts/build-app.sh
+        run: ./scripts/build-app.sh --signed
       - name: Sign update archive and feed
         run: python3 scripts/create-appcast.py "$RELEASE_TAG"
       - name: Verify release installers

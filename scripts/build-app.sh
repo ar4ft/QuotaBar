@@ -5,6 +5,21 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "Build the macOS app on a Mac with Xcode 16 or newer."
   exit 1
 fi
+build_mode="${1:---unsigned}"
+if [[ $# -gt 1 || ( "$build_mode" != "--unsigned" && "$build_mode" != "--signed" ) ]]; then
+  echo "Usage: $0 [--unsigned | --signed]" >&2
+  exit 1
+fi
+if [[ "$build_mode" == "--signed" ]]; then
+  if [[ "${GITHUB_ACTIONS:-}" == "true" && "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ]]; then
+    echo "Signed CI builds are allowed only for a manually dispatched action." >&2
+    exit 1
+  fi
+  if [[ "${SIGNING_IDENTITY:-}" != "Developer ID Application:"* ]]; then
+    echo "--signed requires a Developer ID Application SIGNING_IDENTITY." >&2
+    exit 1
+  fi
+fi
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$project_dir"
 xcrun swift build -c release --arch arm64 --arch x86_64
@@ -38,7 +53,7 @@ test -n "$sparkle_framework"
 ditto "$sparkle_framework" "$bundle_dir/Contents/Frameworks/Sparkle.framework"
 sparkle_root="${sparkle_framework%/Sparkle.xcframework/*}"
 cp "$sparkle_root/LICENSE" "$bundle_dir/Contents/Resources/Sparkle-LICENSE.txt"
-if [[ -n "${UPDATE_PUBLIC_KEY:-}" ]]; then
+if [[ "$build_mode" == "--signed" && -n "${UPDATE_PUBLIC_KEY:-}" ]]; then
   if [[ "${SIGNING_IDENTITY:--}" == "-" ]]; then
     echo "Update-enabled builds require a Developer ID signing identity." >&2
     exit 1
@@ -58,35 +73,35 @@ info.update(SUPublicEDKey=key, SUFeedURL='https://github.com/ar4ft/QuotaBar/rele
 p.write_bytes(plistlib.dumps(info))
 PYKEY
 fi
-identity="${SIGNING_IDENTITY:--}"
-signing_flags=(--force --sign "$identity")
-if [[ "$identity" != "-" ]]; then
-  signing_flags+=(--options runtime --timestamp)
+if [[ "$build_mode" == "--signed" ]]; then
+  identity="$SIGNING_IDENTITY"
+  signing_flags=(--force --sign "$identity" --options runtime --timestamp)
+  framework="$bundle_dir/Contents/Frameworks/Sparkle.framework"
+  for helper in "$framework/Versions/B/XPCServices/Downloader.xpc" \
+                "$framework/Versions/B/XPCServices/Installer.xpc" \
+                "$framework/Versions/B/Updater.app" \
+                "$framework/Versions/B/Autoupdate"; do
+    codesign "${signing_flags[@]}" --preserve-metadata=entitlements "$helper"
+  done
+  codesign "${signing_flags[@]}" "$framework"
+  codesign "${signing_flags[@]}" "$bundle_dir"
+  codesign --verify --deep --strict "$bundle_dir"
+  if [[ -n "${NOTARY_KEYCHAIN_PROFILE:-}" ]]; then
+    test "$identity" != "-"
+    notary_flags=(--keychain-profile "$NOTARY_KEYCHAIN_PROFILE")
+    if [[ -n "${NOTARY_KEYCHAIN_PATH:-}" ]]; then notary_flags+=(--keychain "$NOTARY_KEYCHAIN_PATH"); fi
+    submission="$project_dir/dist/QuotaBar-notary.zip"
+    ditto -c -k --sequesterRsrc --keepParent "$bundle_dir" "$submission"
+    xcrun notarytool submit "$submission" "${notary_flags[@]}" --wait
+    rm -f "$submission"
+    xcrun stapler staple "$bundle_dir"
+    xcrun stapler validate "$bundle_dir"
+    spctl --assess --type execute --verbose "$bundle_dir"
+  fi
 else
-  # Development builds do not enable hardened-runtime library validation.
-  signing_flags+=(--options 0)
-fi
-framework="$bundle_dir/Contents/Frameworks/Sparkle.framework"
-for helper in "$framework/Versions/B/XPCServices/Downloader.xpc" \
-              "$framework/Versions/B/XPCServices/Installer.xpc" \
-              "$framework/Versions/B/Updater.app" \
-              "$framework/Versions/B/Autoupdate"; do
-  codesign "${signing_flags[@]}" --preserve-metadata=entitlements "$helper"
-done
-codesign "${signing_flags[@]}" "$framework"
-codesign "${signing_flags[@]}" "$bundle_dir"
-codesign --verify --deep --strict "$bundle_dir"
-if [[ -n "${NOTARY_KEYCHAIN_PROFILE:-}" ]]; then
-  test "$identity" != "-"
-  notary_flags=(--keychain-profile "$NOTARY_KEYCHAIN_PROFILE")
-  if [[ -n "${NOTARY_KEYCHAIN_PATH:-}" ]]; then notary_flags+=(--keychain "$NOTARY_KEYCHAIN_PATH"); fi
-  submission="$project_dir/dist/QuotaBar-notary.zip"
-  ditto -c -k --sequesterRsrc --keepParent "$bundle_dir" "$submission"
-  xcrun notarytool submit "$submission" "${notary_flags[@]}" --wait
-  rm -f "$submission"
-  xcrun stapler staple "$bundle_dir"
-  xcrun stapler validate "$bundle_dir"
-  spctl --assess --type execute --verbose "$bundle_dir"
+  # Keep only the compiler's platform-required ad-hoc executable signature.
+  # Do not sign the app bundle, re-sign Sparkle, enable updates, or notarize.
+  echo "Development build: no Developer ID signing or notarization."
 fi
 ditto -c -k --sequesterRsrc --keepParent "$bundle_dir" "$project_dir/dist/QuotaBar-macOS.zip"
 dmg_stage="$(mktemp -d)"
@@ -94,11 +109,13 @@ trap 'rm -rf "$dmg_stage"' EXIT
 ditto "$bundle_dir" "$dmg_stage/QuotaBar.app"
 ln -s /Applications "$dmg_stage/Applications"
 hdiutil create -volname QuotaBar -srcfolder "$dmg_stage" -ov -format UDZO "$project_dir/dist/QuotaBar-macOS.dmg"
-if [[ -n "${NOTARY_KEYCHAIN_PROFILE:-}" ]]; then
+if [[ "$build_mode" == "--signed" ]]; then
   codesign "${signing_flags[@]}" "$project_dir/dist/QuotaBar-macOS.dmg"
-  xcrun notarytool submit "$project_dir/dist/QuotaBar-macOS.dmg" "${notary_flags[@]}" --wait
-  xcrun stapler staple "$project_dir/dist/QuotaBar-macOS.dmg"
-  xcrun stapler validate "$project_dir/dist/QuotaBar-macOS.dmg"
+  if [[ -n "${NOTARY_KEYCHAIN_PROFILE:-}" ]]; then
+    xcrun notarytool submit "$project_dir/dist/QuotaBar-macOS.dmg" "${notary_flags[@]}" --wait
+    xcrun stapler staple "$project_dir/dist/QuotaBar-macOS.dmg"
+    xcrun stapler validate "$project_dir/dist/QuotaBar-macOS.dmg"
+  fi
 fi
 hdiutil verify "$project_dir/dist/QuotaBar-macOS.dmg"
 echo "Built $bundle_dir"
