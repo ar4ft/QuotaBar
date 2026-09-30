@@ -11,6 +11,10 @@ final class AccountStore: ObservableObject {
     @Published var globalError: String?
     @Published var presentedConnection: ConnectionRequest?
     @AppStorage("refreshMinutes") var refreshMinutes = 5 { willSet { objectWillChange.send() } }
+    @AppStorage("presentationMode") var presentationMode = false {
+        willSet { objectWillChange.send() }
+        didSet { if presentationMode { presentedConnection = nil; Task { await notifications.clearAll() } } }
+    }
     @AppStorage("showRemaining") var showRemaining = false { willSet { objectWillChange.send() } }
     @AppStorage("notificationsEnabled") var notificationsEnabled = false { willSet { objectWillChange.send() } }
     @AppStorage("pinnedAccountID") var pinnedAccountID = "" { willSet { objectWillChange.send() } }
@@ -28,7 +32,8 @@ final class AccountStore: ObservableObject {
     private var resetAttempts: [UUID: ResetRefreshAttempt] = [:]
     private let historyRepository: UsageHistoryRepository
     var orderedAccounts: [Account] {
-        (AccountSort(rawValue: accountSortRaw) ?? .allowance).sort(accounts, errorIDs: Set(errors.keys), now: clock)
+        if presentationMode { return AccountSort.added.sort(accounts, errorIDs: [], now: clock) }
+        return (AccountSort(rawValue: accountSortRaw) ?? .allowance).sort(accounts, errorIDs: Set(errors.keys), now: clock)
     }
     func availability(_ account: Account) -> AccountAvailability {
         AccountAvailability.make(account, hasError: errors[account.id] != nil, now: clock)
@@ -37,6 +42,7 @@ final class AccountStore: ObservableObject {
     private let vault = KeychainVault()
     private let client = UsageClient()
     private var cooldowns: [UUID: Date] = [:]
+    private var resetCreditCooldowns: [UUID: Date] = [:]
     private var timerTask: Task<Void, Never>?
     private var scheduledRefreshTask: Task<Void, Never>?
     private var writable = true
@@ -105,7 +111,7 @@ final class AccountStore: ObservableObject {
             else { try? vault.remove(id: account.id) }
             throw error
         }
-        epoch[account.id] = UUID(); cooldowns[account.id] = nil; errors[account.id] = nil
+        epoch[account.id] = UUID(); cooldowns[account.id] = nil; resetCreditCooldowns[account.id] = nil; errors[account.id] = nil
         // Wait for an older request to finish before refreshing the replacement.
         while refreshing.contains(account.id) { try await Task.sleep(for: .milliseconds(100)) }
         await refresh(account.id)
@@ -123,7 +129,7 @@ final class AccountStore: ObservableObject {
         do {
             try persist()
             try vault.remove(id: id)
-            errors[id] = nil; cooldowns[id] = nil; epoch[id] = nil
+            errors[id] = nil; cooldowns[id] = nil; resetCreditCooldowns[id] = nil; epoch[id] = nil
             if pinnedAccountID == id.uuidString { pinAccount("") }
             resetAttempts[id] = nil; histories[id] = nil; historyErrors[id] = nil
             Task {
@@ -152,7 +158,7 @@ final class AccountStore: ObservableObject {
         defer { refreshing.remove(id) }
         do {
             var credential = try vault.load(id: id)
-            let snapshot: UsageSnapshot
+            var snapshot: UsageSnapshot
             do { snapshot = try await client.fetch(credential) }
             catch QuotaError.unauthorized where credential.refreshToken != nil {
                 // Serialize per account, then persist rotated credentials before another usage request.
@@ -161,14 +167,23 @@ final class AccountStore: ObservableObject {
                 try vault.save(credential, id: id)
                 snapshot = try await client.fetch(credential)
             }
+            if credential.kind == .codex, snapshot.availableResetCredits == nil,
+               (resetCreditCooldowns[id] ?? .distantPast) <= Date() {
+                do {
+                    snapshot.availableResetCredits = try await client.fetchResetCredits(credential)
+                    resetCreditCooldowns[id] = nil
+                } catch QuotaError.rateLimited(let until) { resetCreditCooldowns[id] = until }
+                catch { resetCreditCooldowns[id] = Date().addingTimeInterval(300) }
+            }
             await refreshNotificationAuthorization()
             guard epoch[id] == generation, let index = accounts.firstIndex(where: { $0.id == id }) else { return }
             let previous = accounts[index]
             var preferences = previous.effectiveAlertPreferences
             preferences.enabled = preferences.enabled && notificationsEnabled && notificationsAuthorized
-            let evaluation = UsageAlerts.evaluate(snapshot: snapshot, state: previous.alertState ?? [:], preferences: preferences)
+            let evaluation = UsageAlerts.evaluate(snapshot: snapshot, state: previous.alertState ?? [:], preferences: preferences, creditState: previous.creditAlertState)
             accounts[index].snapshot = snapshot
             accounts[index].alertState = evaluation.state
+            accounts[index].creditAlertState = evaluation.creditState
             do { try persist() }
             catch { accounts[index] = previous; throw error }
             errors[id] = nil; cooldowns[id] = nil
@@ -177,7 +192,7 @@ final class AccountStore: ObservableObject {
                     resetAttempts[id] = ResetRefreshPolicy.record(boundary: boundary, previous: nil, now: Date())
                 }
             } else { resetAttempts[id] = nil }
-            do { try await notifications.send(evaluation.alerts, account: accounts[index]) }
+            do { if !presentationMode { try await notifications.send(evaluation.alerts, account: accounts[index], maySend: { !self.presentationMode }) } }
             catch { notificationError = "Could not schedule an alert: \(error.localizedDescription)" }
             guard epoch[id] == generation else { return }
             do {
@@ -251,6 +266,7 @@ final class AccountStore: ObservableObject {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: metadataURL.path)
     }
     func connect(_ account: Account? = nil) {
+        guard !presentationMode else { return }
         presentedConnection = ConnectionRequest(account: account)
     }
 }

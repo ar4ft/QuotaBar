@@ -41,7 +41,7 @@ The included GitHub Actions workflow compiles the macOS app, runs tests, and pac
 
 Open **Settings** from the menu bar gear menu.
 
-- **Usage alerts:** enable notifications and accept the macOS notification permission prompt. Configure each account's 80% warning, 95% warning, and allowance recovery alert separately. Alerts are disabled globally until you enable them; per-account defaults enable all three once global notifications are on. macOS Focus and notification settings still control whether a banner is shown.
+- **Usage alerts:** enable notifications and accept the macOS notification permission prompt. Configure each account's 80%/95% warnings or a custom consumed-percentage threshold, allowance recovery alert, and optional low-credit warning separately. Alerts are disabled globally until you enable them; per-account defaults enable all three once global notifications are on. macOS Focus and notification settings still control whether a banner is shown.
 - **Pinned allowance:** choose an account and a usage window, or use “Most constrained window.” You can also pin/unpin an account directly in the menu bar popover. The icon shows remaining allowance; `~` marks a stale/error reading, and `—` means the chosen window has no reading or has crossed a reset that needs confirmation. The dashboard's consumed/remaining preference does not change the pin's meaning.
 - **Launch at login:** move the packaged `QuotaBar.app` into `/Applications`, then enable the toggle. If macOS requires approval, open Login Items from the provided button. The displayed toggle reflects system registration, including changes made in System Settings. A raw Swift package executable cannot register for these OS features.
 
@@ -111,7 +111,7 @@ Usage comes from provider-specific interfaces used by subscription clients:
 
 These are not stable public third-party subscription APIs. Providers may change response formats, permissions, client policies, or login support. The OpenAI sign-in uses the official CLI's device flow rather than claiming an arbitrary application can register a general “Sign in with OpenAI” OAuth client. No provider credentials were available here, so live login and live usage requests have not been tested.
 
-Missing windows remain unknown, never fabricated as 0%. Percentages reflect the last successful reading. Passing a reset timestamp does not assume that quota replenished; the app requests confirmation at the reset boundary and on its configured refresh interval. Enterprise or credit-only plans with no supported quota windows show an unrecognized usage response rather than invented allowance. Extra usage spend/credit balances are not displayed in this version.
+Missing windows remain unknown, never fabricated as 0%. Percentages reflect the last successful reading. Passing a reset timestamp does not assume that quota replenished; the app requests confirmation at the reset boundary and on its configured refresh interval. Enterprise or credit-only plans with no supported quota windows show an unrecognized usage response rather than invented allowance. OpenAI credit balances are displayed separately when reported. Claude extra-usage billing is not displayed.
 
 ## Implementation and verification
 
@@ -121,7 +121,7 @@ Missing windows remain unknown, never fabricated as 0%. Percentages reflect the 
 
 Swift is sufficient for all of these responsibilities. Rust would add a second toolchain and an FFI boundary without helping this app's current workload.
 
-The expanded core suite has 55 tests covering alert persistence and deduplication, confirmed resets, disabled preferences, metadata migration, and pinned allowance behavior in addition to provider parsing and requests. All 55 pass on Swift 6.0.3/Linux. Swift source syntax parsing also passes. Linux compiles only the app's unsupported-platform fallback; it cannot validate SwiftUI, WebKit, Keychain, or macOS UI behavior. The repository workflow compiles the macOS app, runs the full test suite, validates both executable architectures, the ZIP and DMG, and publishes both installers as the app artifact. Live authentication, Keychain behavior, and visual UI behavior still require the following smoke checks.
+The expanded core suite has 65 tests covering alert persistence and deduplication, confirmed resets, disabled preferences, metadata migration, and pinned allowance behavior in addition to provider parsing and requests. All 65 pass on Swift 6.0.3/Linux. Swift source syntax parsing also passes. Linux compiles only the app's unsupported-platform fallback; it cannot validate SwiftUI, WebKit, Keychain, or macOS UI behavior. The repository workflow compiles the macOS app, runs the full test suite, validates both executable architectures, the ZIP and DMG, and publishes both installers as the app artifact. Live authentication, Keychain behavior, and visual UI behavior still require the following smoke checks.
 
 ### macOS smoke checks
 
@@ -142,3 +142,13 @@ The expanded core suite has 55 tests covering alert persistence and deduplicatio
 ## References
 
 Provider endpoint and credential format research used the open-source [CodexBar](https://github.com/steipete/CodexBar) implementation. This project is an independent implementation; no CodexBar source is bundled. The shadow-home approach follows the account-isolation idea you described from T3 Code.
+
+### Version 0.4: credits, privacy, and custom alerts
+
+- **OpenAI credits:** account cards and the menu overview show reported credit balance, unlimited status, and available reset-credit count separately from subscription percentages. Reset inventory is read through `GET /backend-api/wham/rate-limit-reset-credits` using that account's credentials, with a five-second timeout. An unsupported or failed inventory request leaves its count **Not reported** while retaining successful allowance readings. HTTP 429 cooldowns are respected; other failures back off for five minutes. QuotaBar never redeems reset credits or buys credits. Credit-only responses without quota windows remain unsupported.
+- **Presentation mode:** use the dashboard eye button, menu settings, or Settings → General. It hides account labels, emails, usage values, balances, reset dates, history, and menu-bar tooltips. It silences new usage notifications and clears existing QuotaBar notifications. Provider names and connected-account counts remain visible. Mode persists across launches; polling and private local history continue. Disable it before connecting accounts or viewing/exporting history.
+- **Custom alerts:** select an account in Settings → Usage alerts and choose a threshold from 1–99% consumed, replacing the preset warnings. OpenAI accounts can also set a numeric low-credit threshold. Unknown and unlimited balances never trigger low-credit warnings. Credit warning receipts survive relaunch and rearm after a reported top-up above the threshold. Existing account files retain their preferences and gain optional fields without migration steps.
+
+The new implementation is independent Swift code. Codex Fuel Companion was reviewed for feature ideas; none of its restricted source or artwork was copied.
+
+Additional Mac smoke checks: enable presentation mode while dashboard, menu, history, and Settings are open; verify identities and balances disappear, tooltips reveal no labels, CSV export is unavailable, and notifications stop. Restore normal mode, verify custom thresholds persist, and check credit inventory against a real eligible OpenAI account. These provider and OS interactions need a Mac and live accounts.

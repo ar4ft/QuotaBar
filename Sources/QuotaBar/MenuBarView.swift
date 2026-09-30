@@ -30,7 +30,7 @@ struct MenuBarView: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {
                                     Image(systemName: account.provider.symbol).foregroundStyle(account.provider.tint)
-                                    Text(account.name).font(.headline).lineLimit(1)
+                                    Text(store.presentationMode ? account.provider.title + " account" : account.name).font(.headline).lineLimit(1)
                                     Spacer()
                                     Button {
                                         store.pinAccount(store.pinnedAccountID == account.id.uuidString ? "" : account.id.uuidString)
@@ -38,18 +38,23 @@ struct MenuBarView: View {
                                         Image(systemName: store.pinnedAccountID == account.id.uuidString ? "pin.fill" : "pin")
                                     }.buttonStyle(.plain).help("Pin account allowance in menu bar")
                                     Button { dashboard(); store.connect(account) } label: { Image(systemName: "person.crop.circle.badge.checkmark") }
-                                        .buttonStyle(.plain).help("Reconnect \(account.name)")
+                                        .buttonStyle(.plain).help("Reconnect account").disabled(store.presentationMode)
                                 }
-                                Text(store.availability(account).status.title).font(.caption).foregroundStyle(.secondary)
-                                if let snapshot = account.snapshot {
-                                    ForEach(snapshot.windows) { window in UsageMeter(window: window, tint: account.provider.tint, showRemaining: store.showRemaining) }
-                                    if snapshot.isStale || store.errors[account.id] != nil {
-                                        Text("Last reading · \(snapshot.fetchedAt.formatted(date: .omitted, time: .shortened))")
-                                            .font(.caption).foregroundStyle(.orange)
+                                if store.presentationMode {
+                                    Text("Account details and balances hidden").font(.caption).foregroundStyle(.secondary)
+                                } else {
+                                    Text(store.availability(account).status.title).font(.caption).foregroundStyle(.secondary)
+                                    if let snapshot = account.snapshot {
+                                        CreditSummary(snapshot: snapshot, provider: account.provider)
+                                        ForEach(snapshot.windows) { window in UsageMeter(window: window, tint: account.provider.tint, showRemaining: store.showRemaining) }
+                                        if snapshot.isStale || store.errors[account.id] != nil {
+                                            Text("Last reading · \(snapshot.fetchedAt.formatted(date: .omitted, time: .shortened))")
+                                                .font(.caption).foregroundStyle(.orange)
+                                        }
+                                    } else { Text("No usage reading yet").font(.caption).foregroundStyle(.secondary) }
+                                    if let error = store.errors[account.id] {
+                                        Text(error).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                                     }
-                                } else { Text("No usage reading yet").font(.caption).foregroundStyle(.secondary) }
-                                if let error = store.errors[account.id] {
-                                    Text(error).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                                 }
                             }.padding(16)
                             Divider()
@@ -61,6 +66,7 @@ struct MenuBarView: View {
                 Button("Open dashboard", action: dashboard)
                 Spacer()
                 Menu {
+                    Toggle("Presentation mode", isOn: $store.presentationMode)
                     SettingsLink { Text("Settings…") }
                     Button("Quit QuotaBar") { NSApplication.shared.terminate(nil) }
                 } label: { Image(systemName: "gearshape") }.menuStyle(.borderlessButton).fixedSize()
@@ -77,7 +83,7 @@ struct MenuBarLabel: View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
             HStack(spacing: 5) {
                 Image(systemName: "chart.bar.xaxis")
-                if let account = store.pinnedAccount {
+                if !store.presentationMode, let account = store.pinnedAccount {
                     let reading = PinnedAllowance.make(snapshot: account.snapshot, windowID: store.pinnedWindowID,
                                                        hasError: store.errors[account.id] != nil, now: context.date)
                     Text(reading.text).monospacedDigit()
@@ -88,6 +94,7 @@ struct MenuBarLabel: View {
         }
     }
     private func help(now: Date) -> String {
+        if store.presentationMode { return "QuotaBar · presentation mode · details hidden" }
         guard let account = store.pinnedAccount else { return "QuotaBar · subscription usage" }
         let reading = PinnedAllowance.make(snapshot: account.snapshot, windowID: store.pinnedWindowID,
                                            hasError: store.errors[account.id] != nil, now: now)

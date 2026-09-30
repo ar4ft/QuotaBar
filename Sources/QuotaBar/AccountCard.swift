@@ -7,6 +7,7 @@ struct AccountCard: View {
     let error: String?
     let refreshing: Bool
     let showRemaining: Bool
+    let presentationMode: Bool
     let availability: AccountAvailability
     let history: () -> Void
     let refresh: () -> Void
@@ -14,6 +15,17 @@ struct AccountCard: View {
     let rename: () -> Void
     let remove: () -> Void
     var body: some View {
+        Group {
+        if presentationMode {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(account.provider.title + " account", systemImage: account.provider.symbol)
+                Text("Account details and balances hidden").font(.caption).foregroundStyle(.secondary)
+            }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                .background(.background, in: RoundedRectangle(cornerRadius: 16))
+        } else { content }
+        }
+    }
+    private var content: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 12) {
                 Image(systemName: account.provider.symbol).font(.title3)
@@ -36,6 +48,7 @@ struct AccountCard: View {
             Text(availability.status.title).font(.caption.weight(.medium))
                 .foregroundStyle(availability.status.isAvailable ? account.provider.tint : .secondary)
             if let snapshot = account.snapshot {
+                CreditSummary(snapshot: snapshot, provider: account.provider)
                 ForEach(snapshot.windows) { window in
                     UsageMeter(window: window, tint: account.provider.tint, showRemaining: showRemaining)
                 }
@@ -69,6 +82,19 @@ struct AccountCard: View {
         }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
             .background(.background, in: RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.06), lineWidth: 1))
+    }
+}
+
+struct CreditSummary: View {
+    let snapshot: UsageSnapshot
+    let provider: Provider
+    var body: some View {
+        if provider == .openAI {
+            VStack(alignment: .leading, spacing: 4) {
+                Label("Credits: " + (snapshot.credits?.display ?? "Not reported"), systemImage: "creditcard")
+                Text(snapshot.availableResetCredits.map { "Reset credits available: \($0)" } ?? "Reset credits: Not reported")
+            }.font(.caption).foregroundStyle(.secondary)
+        }
     }
 }
 

@@ -29,11 +29,28 @@ public struct UsageWindow: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+public struct CreditBalance: Codable, Equatable, Sendable {
+    public var balance: Double?
+    public var unlimited: Bool
+    public var hasCredits: Bool?
+    public init(balance: Double? = nil, unlimited: Bool = false, hasCredits: Bool? = nil) {
+        self.balance = balance; self.unlimited = unlimited; self.hasCredits = hasCredits
+    }
+    public var display: String {
+        if unlimited { return "Unlimited" }
+        if let balance { return balance.formatted(.number.precision(.fractionLength(0...2))) }
+        return hasCredits.map { $0 ? "Available · amount not reported" : "None available" } ?? "Not reported"
+    }
+}
+
 public struct UsageSnapshot: Codable, Equatable, Sendable {
     public var windows: [UsageWindow]
     public var plan: String?
     public var fetchedAt: Date
-    public init(windows: [UsageWindow], plan: String? = nil, fetchedAt: Date = Date()) {
+    public var credits: CreditBalance?
+    public var availableResetCredits: Int?
+    public init(windows: [UsageWindow], plan: String? = nil, fetchedAt: Date = Date(), credits: CreditBalance? = nil, availableResetCredits: Int? = nil) {
+        self.credits = credits; self.availableResetCredits = availableResetCredits
         self.windows = windows; self.plan = plan; self.fetchedAt = fetchedAt
     }
     public var isStale: Bool { Date().timeIntervalSince(fetchedAt) > 600 }
@@ -48,6 +65,7 @@ public struct Account: Codable, Identifiable, Sendable {
     public var addedAt: Date
     public var alertPreferences: AlertPreferences?
     public var alertState: [String: WindowAlertState]?
+    public var creditAlertState: CreditAlertState?
     public var effectiveAlertPreferences: AlertPreferences { alertPreferences ?? AlertPreferences() }
     public init(id: UUID = UUID(), provider: Provider, name: String, detail: String? = nil) {
         self.id = id; self.provider = provider; self.name = name; self.detail = detail

@@ -5,8 +5,16 @@ public struct AlertPreferences: Codable, Equatable, Sendable {
     public var warnAt80 = true
     public var warnAt95 = true
     public var notifyWhenAvailable = true
+    public var customThresholds: [Int]?
+    public var lowCreditThreshold: Double?
     public init() {}
-    public var thresholds: [Int] { (warnAt80 ? [80] : []) + (warnAt95 ? [95] : []) }
+    public var thresholds: [Int] { Array(Set((customThresholds ?? ((warnAt80 ? [80] : []) + (warnAt95 ? [95] : []))).filter { (1...99).contains($0) })).sorted() }
+}
+
+public struct CreditAlertState: Codable, Equatable, Sendable {
+    public var observedAt: Date
+    public var threshold: Double
+    public var notified: Bool
 }
 
 public struct WindowAlertState: Codable, Equatable, Sendable {
@@ -18,7 +26,7 @@ public struct WindowAlertState: Codable, Equatable, Sendable {
 }
 
 public struct UsageAlert: Equatable, Sendable {
-    public enum Kind: Equatable, Sendable { case threshold(Int), availableAgain }
+    public enum Kind: Equatable, Sendable { case threshold(Int), availableAgain, lowCredits(Double) }
     public var windowID: String
     public var windowTitle: String
     public var usedPercent: Double
@@ -28,13 +36,14 @@ public struct UsageAlert: Equatable, Sendable {
 public struct AlertEvaluation: Sendable {
     public var state: [String: WindowAlertState]
     public var alerts: [UsageAlert]
+    public var creditState: CreditAlertState?
 }
 
 public enum UsageAlerts {
     // Evaluate only successful provider readings; a clock reaching a reset is never evidence of refill.
     // Threshold receipts are persisted per window/cycle to avoid repeating alerts after relaunch.
     public static func evaluate(snapshot: UsageSnapshot, state: [String: WindowAlertState],
-                                preferences: AlertPreferences) -> AlertEvaluation {
+                                preferences: AlertPreferences, creditState: CreditAlertState? = nil) -> AlertEvaluation {
         var state = state
         var alerts: [UsageAlert] = []
         for window in snapshot.windows {
@@ -69,6 +78,21 @@ public enum UsageAlerts {
             state[window.id] = WindowAlertState(usedPercent: window.usedPercent, resetsAt: window.resetsAt,
                                               observedAt: snapshot.fetchedAt, notifiedThresholds: receipts, notifiedRecovery: notifiedRecovery)
         }
-        return AlertEvaluation(state: state, alerts: alerts)
+        var nextCreditState = creditState
+        if snapshot.credits?.unlimited == true, let old = creditState, snapshot.fetchedAt > old.observedAt {
+            nextCreditState = CreditAlertState(observedAt: snapshot.fetchedAt, threshold: old.threshold, notified: false)
+        }
+        if let threshold = preferences.lowCreditThreshold, threshold.isFinite, threshold >= 0,
+           let credits = snapshot.credits, !credits.unlimited, let balance = credits.balance,
+           balance.isFinite, balance >= 0, snapshot.fetchedAt > (creditState?.observedAt ?? .distantPast) {
+            var notified = creditState?.threshold == threshold ? creditState?.notified ?? false : false
+            if balance > threshold { notified = false }
+            if preferences.enabled && balance <= threshold && !notified {
+                notified = true
+                alerts.append(UsageAlert(windowID: "credits", windowTitle: "Credits", usedPercent: 0, kind: .lowCredits(balance)))
+            }
+            nextCreditState = CreditAlertState(observedAt: snapshot.fetchedAt, threshold: threshold, notified: notified)
+        }
+        return AlertEvaluation(state: state, alerts: alerts, creditState: nextCreditState)
     }
 }

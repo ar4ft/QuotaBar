@@ -30,16 +30,18 @@ final class UsageNotifications {
         }
         return try await center.requestAuthorization(options: [.alert, .sound])
     }
-    func send(_ alerts: [UsageAlert], account: Account) async throws {
+    func send(_ alerts: [UsageAlert], account: Account, maySend: () -> Bool) async throws {
         guard !alerts.isEmpty, let center else { return }
         let status = await authorization()
-        guard status == .authorized || status == .provisional else { return }
+        guard (status == .authorized || status == .provisional) && maySend() else { return }
         let content = UNMutableNotificationContent()
         content.title = "\(account.name) · \(account.provider.title)"
         content.body = alerts.prefix(5).map { alert in
             switch alert.kind {
             case .threshold(let threshold):
                 return "\(alert.windowTitle): \(Int(alert.usedPercent.rounded()))% used (\(threshold)% alert)."
+            case .lowCredits(let balance):
+                return "Credits: \(balance.formatted(.number.precision(.fractionLength(0...2)))) remaining."
             case .availableAgain:
                 return "\(alert.windowTitle): allowance is available again · \(Int((100 - alert.usedPercent).rounded()))% remaining."
             }
@@ -50,6 +52,11 @@ final class UsageNotifications {
         content.userInfo = ["accountID": account.id.uuidString]
         let request = UNNotificationRequest(identifier: "usage-\(account.id.uuidString)-\(UUID().uuidString)", content: content, trigger: nil)
         try await center.add(request)
+        if !maySend() { center.removeDeliveredNotifications(withIdentifiers: [request.identifier]); center.removePendingNotificationRequests(withIdentifiers: [request.identifier]) }
+    }
+    func clearAll() async {
+        center?.removeAllPendingNotificationRequests()
+        center?.removeAllDeliveredNotifications()
     }
     func removeNotifications(for id: UUID) async {
         guard let center else { return }

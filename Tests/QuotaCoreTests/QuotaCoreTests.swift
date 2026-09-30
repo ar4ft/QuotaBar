@@ -75,7 +75,7 @@ final class CredentialParserTests: XCTestCase {
     }
 }
 
-private actor MockTransport: HTTPTransport {
+actor MockTransport: HTTPTransport {
     var responses: [(Int, String, [String: String])]
     var requests: [URLRequest] = []
     init(_ responses: [(Int, String, [String: String])]) { self.responses = responses }

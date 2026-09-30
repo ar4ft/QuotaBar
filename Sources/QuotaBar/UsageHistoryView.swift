@@ -32,6 +32,16 @@ struct UsageHistoryView: View {
     }
     private var points: [HistoryPoint] { HistoryPoint.make(samples, windowID: selectedWindow) }
     var body: some View {
+        Group {
+            if store.presentationMode {
+                VStack(spacing: 20) {
+                    ContentUnavailableView("History hidden", systemImage: "eye.slash", description: Text("Turn off presentation mode to view or export balances."))
+                    Button("Done") { dismiss() }
+                }.frame(width: 760, height: 740)
+            } else { content }
+        }
+    }
+    private var content: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
                 VStack(alignment: .leading, spacing: 6) {

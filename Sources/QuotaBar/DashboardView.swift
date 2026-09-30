@@ -58,13 +58,13 @@ struct DashboardView: View {
                     header
                     HStack(spacing: 16) {
                         MetricTile(title: "CONNECTED", value: "\(filtered.count)", detail: "subscription accounts", symbol: "person.2")
-                        MetricTile(title: "AVAILABLE", value: "\(filtered.filter { store.availability($0).status.isAvailable }.count)", detail: "accounts with allowance left", symbol: "checkmark.circle")
-                        MetricTile(title: "NEXT RESET", value: nextReset, detail: "earliest upcoming window", symbol: "clock.arrow.circlepath")
+                        MetricTile(title: "AVAILABLE", value: store.presentationMode ? "—" : "\(filtered.filter { store.availability($0).status.isAvailable }.count)", detail: "accounts with allowance left", symbol: "checkmark.circle")
+                        MetricTile(title: "NEXT RESET", value: store.presentationMode ? "—" : nextReset, detail: "earliest upcoming window", symbol: "clock.arrow.circlepath")
                     }
                     HStack {
                         Text("YOUR ACCOUNTS").font(.system(size: 11, weight: .semibold)).tracking(1.5).foregroundStyle(.secondary)
                         Spacer()
-                        Toggle("Available only", isOn: $availableOnly).toggleStyle(.button).controlSize(.small)
+                        Toggle("Available only", isOn: $availableOnly).disabled(store.presentationMode).toggleStyle(.button).controlSize(.small)
                         Picker("Sort accounts", selection: $store.accountSortRaw) {
                             ForEach(AccountSort.allCases) { Text($0.title).tag($0.rawValue) }
                         }.labelsHidden().frame(width: 175)
@@ -92,10 +92,16 @@ struct DashboardView: View {
             .searchable(text: $search, placement: .toolbar, prompt: "Find an account")
             .toolbar {
                 ToolbarItem {
+                    Toggle(isOn: $store.presentationMode) { Image(systemName: store.presentationMode ? "eye.slash.fill" : "eye") }.toggleStyle(.button).help("Hide account details and silence usage alerts")
+                }
+                ToolbarItem {
                     Button { Task { await store.refreshAll() } } label: { Image(systemName: "arrow.clockwise") }
                         .help("Refresh all accounts").disabled(!store.refreshing.isEmpty)
                 }
             }
+        }
+        .onChange(of: store.presentationMode) { _, hidden in
+            if hidden { search = ""; availableOnly = false; renameAccount = nil; deleting = nil; historyAccount = nil }
         }
         .sheet(item: $store.presentedConnection) { request in ConnectAccountView(request: request).environmentObject(store) }
         .sheet(item: $historyAccount) { account in UsageHistoryView(account: account).environmentObject(store) }
@@ -120,7 +126,7 @@ struct DashboardView: View {
             }
             Spacer()
             Button { store.connect() } label: { Label("Add account", systemImage: "plus") }
-                .buttonStyle(.borderedProminent).tint(.primary).controlSize(.large)
+                .buttonStyle(.borderedProminent).tint(.primary).controlSize(.large).disabled(store.presentationMode)
         }
     }
     private var emptyState: some View {
@@ -135,7 +141,7 @@ struct DashboardView: View {
     }
     private func card(_ account: Account) -> some View {
         AccountCard(account: account, error: store.errors[account.id], refreshing: store.refreshing.contains(account.id),
-                    showRemaining: store.showRemaining, availability: store.availability(account),
+                    showRemaining: store.showRemaining, presentationMode: store.presentationMode, availability: store.availability(account),
                     history: { historyAccount = account },
                     refresh: { Task { await store.refresh(account.id) } }, reconnect: { store.connect(account) },
                     rename: { newName = account.name; renameAccount = account }, remove: { deleting = account })

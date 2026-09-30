@@ -50,6 +50,14 @@ public struct UsageClient: Sendable {
         return try UsageParser.parse(data, provider: credential.kind == .codex ? .openAI : .claude)
     }
 
+    // Read inventory only. QuotaBar never redeems reset credits.
+    public func fetchResetCredits(_ credential: Credential) async throws -> Int {
+        guard credential.kind == .codex else { throw QuotaError.invalidCredentials }
+        var request = request(URL(string: "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits")!, credential: credential)
+        request.timeoutInterval = 5
+        return try UsageParser.parseResetCredits(await checked(request))
+    }
+
     public func organizations(_ credential: Credential) async throws -> [Organization] {
         let data = try await checked(request(URL(string: "https://claude.ai/api/organizations")!, credential: credential))
         guard let orgs = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { throw QuotaError.malformedResponse }

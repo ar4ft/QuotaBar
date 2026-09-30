@@ -15,6 +15,9 @@ struct PreferencesView: View {
                 Picker("Refresh accounts every", selection: $store.refreshMinutes) {
                     Text("1 minute").tag(1); Text("5 minutes").tag(5); Text("15 minutes").tag(15); Text("30 minutes").tag(30)
                 }
+                Toggle("Presentation mode", isOn: $store.presentationMode)
+                Text("Hides account identities and balances and silences usage alerts. Existing QuotaBar notifications are cleared when enabled.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show remaining allowance in dashboard", isOn: $store.showRemaining)
                 Toggle("Launch QuotaBar at login", isOn: Binding(get: { login.enabled }, set: { value in
                     Task { await login.setEnabled(value) }
@@ -31,7 +34,7 @@ struct PreferencesView: View {
             Section("Menu bar") {
                 Picker("Pinned account", selection: Binding(get: { store.pinnedAccountID }, set: { store.pinAccount($0) })) {
                     Text("Icon only").tag("")
-                    ForEach(store.accounts) { Text("\($0.name) · \($0.provider.title)").tag($0.id.uuidString) }
+                    ForEach(store.accounts) { Text(store.presentationMode ? $0.provider.title + " account" : "\($0.name) · \($0.provider.title)").tag($0.id.uuidString) }
                 }
                 if let account = store.pinnedAccount {
                     Picker("Allowance window", selection: $store.pinnedWindowID) {
@@ -60,15 +63,39 @@ struct PreferencesView: View {
                         NSWorkspace.shared.open(url)
                     }
                 }
-                if !store.accounts.isEmpty {
+                if !store.accounts.isEmpty && !store.presentationMode {
                     Picker("Configure account", selection: $alertAccountID) {
-                        ForEach(store.accounts) { Text("\($0.name) · \($0.provider.title)").tag($0.id.uuidString) }
+                        ForEach(store.accounts) { Text(store.presentationMode ? $0.provider.title + " account" : "\($0.name) · \($0.provider.title)").tag($0.id.uuidString) }
                     }
                     if let account = alertAccount {
                         Toggle("Alerts for this account", isOn: preference(account, \.enabled))
                         Group {
-                            Toggle("Warn at 80% consumed", isOn: preference(account, \.warnAt80))
-                            Toggle("Warn at 95% consumed", isOn: preference(account, \.warnAt95))
+                            Toggle("Use a custom consumption threshold", isOn: Binding(get: {
+                                account.effectiveAlertPreferences.customThresholds != nil
+                            }, set: { enabled in
+                                store.updateAlertPreferences(account.id) { $0.customThresholds = enabled ? [90] : nil }
+                            }))
+                            if let threshold = account.effectiveAlertPreferences.customThresholds?.first {
+                                Stepper("Warn at \(threshold)% consumed", value: Binding(get: { threshold }, set: { value in
+                                    store.updateAlertPreferences(account.id) { $0.customThresholds = [value] }
+                                }), in: 1...99)
+                            } else {
+                                Toggle("Warn at 80% consumed", isOn: preference(account, \.warnAt80))
+                                Toggle("Warn at 95% consumed", isOn: preference(account, \.warnAt95))
+                            }
+                            if account.provider == .openAI {
+                                Toggle("Warn when credits are low", isOn: Binding(get: {
+                                    account.effectiveAlertPreferences.lowCreditThreshold != nil
+                                }, set: { enabled in
+                                    store.updateAlertPreferences(account.id) { $0.lowCreditThreshold = enabled ? 100 : nil }
+                                }))
+                                if let threshold = account.effectiveAlertPreferences.lowCreditThreshold {
+                                    Stepper("Low-credit threshold: \(Int(threshold))", value: Binding(get: { threshold }, set: { value in
+                                        store.updateAlertPreferences(account.id) { $0.lowCreditThreshold = value }
+                                    }), in: 0...100_000, step: 10)
+                                }
+                                Text("Credit alerts require a numeric provider balance; unknown or unlimited balances never trigger them.").font(.caption).foregroundStyle(.secondary)
+                            }
                             Toggle("Notify when allowance is available again", isOn: preference(account, \.notifyWhenAvailable))
                         }.disabled(!account.effectiveAlertPreferences.enabled)
                     }
@@ -76,7 +103,7 @@ struct PreferencesView: View {
                 Text("One threshold alert per window and reset cycle. Recovery alerts require a fresh provider reading, after exhaustion or a confirmed reset from at least 80% usage. macOS Focus settings can silence notifications.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-        }.formStyle(.grouped).padding().frame(width: 540, height: 680)
+        }.formStyle(.grouped).padding().frame(width: 560, height: 780)
             .task {
                 login.refresh(); await store.refreshNotificationAuthorization()
                 selectAlertAccount()

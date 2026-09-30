@@ -43,7 +43,34 @@ public enum UsageParser {
         }
         // An absent quota is unknown, never a synthetic zero.
         guard !windows.isEmpty else { throw QuotaError.malformedResponse }
-        return UsageSnapshot(windows: windows, plan: json["plan_type"] as? String, fetchedAt: now)
+        var credits: CreditBalance?
+        var resetCredits: Int?
+        if provider == .openAI {
+            if let raw = json["credits"] as? [String: Any] {
+                let balance = number(raw["balance"]).flatMap { $0 >= 0 ? $0 : nil }
+                let unlimited = boolean(raw["unlimited"]) ?? false
+                let available = boolean(raw["has_credits"])
+                if balance != nil || unlimited || available != nil {
+                    credits = CreditBalance(balance: balance, unlimited: unlimited, hasCredits: available)
+                }
+            }
+            if let raw = json["rate_limit_reset_credits"] as? [String: Any],
+               let count = number(raw["available_count"]), count >= 0, count < Double(Int.max), count.rounded(.down) == count {
+                resetCredits = Int(count)
+            }
+        }
+        return UsageSnapshot(windows: windows, plan: json["plan_type"] as? String, fetchedAt: now,
+                             credits: credits, availableResetCredits: resetCredits)
+    }
+    public static func parseResetCredits(_ data: Data) throws -> Int {
+        guard let raw = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let count = number(raw["available_count"]), count >= 0,
+              count < Double(Int.max), count.rounded(.down) == count else { throw QuotaError.malformedResponse }
+        return Int(count)
+    }
+    private static func boolean(_ value: Any?) -> Bool? {
+        guard let value = value as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID() else { return nil }
+        return value.boolValue
     }
     private static func number(_ value: Any?) -> Double? {
         let result: Double?
