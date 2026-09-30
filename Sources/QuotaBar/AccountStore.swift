@@ -21,6 +21,18 @@ final class AccountStore: ObservableObject {
     private let notifications = UsageNotifications()
     var pinnedAccount: Account? { accounts.first { $0.id.uuidString == pinnedAccountID } }
     var notificationsAuthorized: Bool { notificationAuthorization == .authorized || notificationAuthorization == .provisional }
+    @AppStorage("accountSort") var accountSortRaw = AccountSort.allowance.rawValue { willSet { objectWillChange.send() } }
+    @Published private(set) var clock = Date()
+    @Published private(set) var histories: [UUID: [UsageSnapshot]] = [:]
+    @Published private(set) var historyErrors: [UUID: String] = [:]
+    private var resetAttempts: [UUID: ResetRefreshAttempt] = [:]
+    private let historyRepository: UsageHistoryRepository
+    var orderedAccounts: [Account] {
+        (AccountSort(rawValue: accountSortRaw) ?? .allowance).sort(accounts, errorIDs: Set(errors.keys), now: clock)
+    }
+    func availability(_ account: Account) -> AccountAvailability {
+        AccountAvailability.make(account, hasError: errors[account.id] != nil, now: clock)
+    }
     let root: URL
     private let vault = KeychainVault()
     private let client = UsageClient()
@@ -33,6 +45,7 @@ final class AccountStore: ObservableObject {
     init() {
         root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("QuotaBar", isDirectory: true)
+        historyRepository = UsageHistoryRepository(directory: root.appendingPathComponent("History", isDirectory: true))
         do {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true,
                                                     attributes: [.posixPermissions: 0o700])
@@ -51,11 +64,15 @@ final class AccountStore: ObservableObject {
         timerTask = Task { [weak self] in
             await self?.refreshNotificationAuthorization()
             await self?.refreshAll()
+            var lastPeriodicRefresh = Date()
             while !Task.isCancelled {
-                let minutes = min(60, max(1, self?.refreshMinutes ?? 5))
-                try? await Task.sleep(for: .seconds(minutes * 60))
+                try? await Task.sleep(for: .seconds(15))
                 guard !Task.isCancelled else { break }
-                await self?.refreshAll()
+                let now = Date(); self?.clock = now
+                let interval = min(60, max(1, self?.refreshMinutes ?? 5)) * 60
+                if now.timeIntervalSince(lastPeriodicRefresh) >= Double(interval) {
+                    await self?.refreshAll(); lastPeriodicRefresh = Date()
+                } else { await self?.refreshExpiredWindows() }
             }
         }
     }
@@ -97,7 +114,12 @@ final class AccountStore: ObservableObject {
             try vault.remove(id: id)
             errors[id] = nil; cooldowns[id] = nil; epoch[id] = nil
             if pinnedAccountID == id.uuidString { pinAccount("") }
-            Task { await notifications.removeNotifications(for: id) }
+            resetAttempts[id] = nil; histories[id] = nil; historyErrors[id] = nil
+            Task {
+                await notifications.removeNotifications(for: id)
+                do { try await historyRepository.remove(id) }
+                catch { globalError = "Could not remove usage history: \(error.localizedDescription)" }
+            }
         } catch {
             accounts = previous; try? persist(); globalError = error.localizedDescription
         }
@@ -112,6 +134,9 @@ final class AccountStore: ObservableObject {
         guard !refreshing.contains(id), accounts.contains(where: { $0.id == id }), writable else { return }
         if let until = cooldowns[id], until > Date() { return }
         let generation = epoch[id] ?? UUID(); epoch[id] = generation
+        if let boundary = ResetRefreshPolicy.expiredBoundary(accounts.first(where: { $0.id == id })?.snapshot, now: Date()) {
+            resetAttempts[id] = ResetRefreshPolicy.record(boundary: boundary, previous: resetAttempts[id], now: Date())
+        }
         refreshing.insert(id)
         defer { refreshing.remove(id) }
         do {
@@ -136,13 +161,48 @@ final class AccountStore: ObservableObject {
             do { try persist() }
             catch { accounts[index] = previous; throw error }
             errors[id] = nil; cooldowns[id] = nil
+            if let boundary = ResetRefreshPolicy.expiredBoundary(snapshot, now: Date()) {
+                if resetAttempts[id]?.boundary != boundary {
+                    resetAttempts[id] = ResetRefreshPolicy.record(boundary: boundary, previous: nil, now: Date())
+                }
+            } else { resetAttempts[id] = nil }
             do { try await notifications.send(evaluation.alerts, account: accounts[index]) }
             catch { notificationError = "Could not schedule an alert: \(error.localizedDescription)" }
+            guard epoch[id] == generation else { return }
+            do {
+                let samples = try await historyRepository.record(snapshot, for: id)
+                guard epoch[id] == generation else { return }
+                histories[id] = samples; historyErrors[id] = nil
+            } catch { historyErrors[id] = "History could not be saved: \(error.localizedDescription)" }
         } catch {
             guard epoch[id] == generation else { return }
             errors[id] = error.localizedDescription
             if case QuotaError.rateLimited(let until) = error { cooldowns[id] = until }
         }
+    }
+    private func refreshExpiredWindows() async {
+        for account in accounts {
+            guard !Task.isCancelled else { return }
+            if ResetRefreshPolicy.isDue(account.snapshot, attempt: resetAttempts[account.id], cooldown: cooldowns[account.id], now: Date()) {
+                await refresh(account.id)
+            }
+        }
+    }
+    func loadHistory(_ id: UUID) async {
+        guard accounts.contains(where: { $0.id == id }) else { return }
+        do {
+            let samples = try await historyRepository.load(id)
+            guard accounts.contains(where: { $0.id == id }) else { return }
+            if (samples.last?.fetchedAt ?? .distantPast) >= (histories[id]?.last?.fetchedAt ?? .distantPast) { histories[id] = samples }
+            historyErrors[id] = nil
+        } catch { historyErrors[id] = "History could not be read: \(error.localizedDescription)" }
+    }
+    func clearHistory(_ id: UUID) async {
+        guard !refreshing.contains(id) else { return }
+        refreshing.insert(id)
+        defer { refreshing.remove(id) }
+        do { try await historyRepository.remove(id); histories[id] = []; historyErrors[id] = nil }
+        catch { historyErrors[id] = error.localizedDescription }
     }
     func pinAccount(_ id: String) {
         pinnedWindowID = ""; pinnedAccountID = id

@@ -7,6 +7,8 @@ struct AccountCard: View {
     let error: String?
     let refreshing: Bool
     let showRemaining: Bool
+    let availability: AccountAvailability
+    let history: () -> Void
     let refresh: () -> Void
     let reconnect: () -> Void
     let rename: () -> Void
@@ -26,10 +28,13 @@ struct AccountCard: View {
                     Button("Refresh", action: refresh)
                     Button("Reconnect…", action: reconnect)
                     Button("Rename…", action: rename)
+                    Button("History & export…", action: history)
                     Divider(); Button("Remove account", role: .destructive, action: remove).disabled(refreshing)
                 } label: { Image(systemName: "ellipsis").frame(width: 20, height: 20) }
                     .menuStyle(.borderlessButton).fixedSize()
             }
+            Text(availability.status.title).font(.caption.weight(.medium))
+                .foregroundStyle(availability.status.isAvailable ? account.provider.tint : .secondary)
             if let snapshot = account.snapshot {
                 ForEach(snapshot.windows) { window in
                     UsageMeter(window: window, tint: account.provider.tint, showRemaining: showRemaining)
@@ -58,6 +63,7 @@ struct AccountCard: View {
                     }
                 } else { Text("Awaiting first reading").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
+                Button("History", action: history).buttonStyle(.plain).font(.caption).foregroundStyle(account.provider.tint)
                 if let plan = account.snapshot?.plan { Text(plan.capitalized).font(.caption.weight(.medium)).foregroundStyle(.secondary) }
             }
         }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
@@ -71,11 +77,13 @@ struct UsageMeter: View {
     let tint: Color
     let showRemaining: Bool
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        TimelineView(.periodic(from: .now, by: 15)) { context in
+            let awaitingReset = window.resetsAt.map { $0 <= context.date } ?? false
+            VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(window.title).font(.callout.weight(.medium))
                 Spacer()
-                Text("\(Int((showRemaining ? window.remainingPercent : window.usedPercent).rounded()))%")
+                Text(awaitingReset ? "—" : "\(Int((showRemaining ? window.remainingPercent : window.usedPercent).rounded()))%")
                     .font(.system(.callout, design: .rounded).weight(.semibold)).monospacedDigit()
                 Text(showRemaining ? "left" : "used").font(.caption).foregroundStyle(.secondary)
             }
@@ -83,11 +91,10 @@ struct UsageMeter: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(tint.opacity(0.12))
                     Capsule().fill(window.usedPercent >= 90 ? Color.orange : tint)
-                        .frame(width: max(0, proxy.size.width * (showRemaining ? window.remainingPercent : window.usedPercent) / 100))
+                        .frame(width: max(0, proxy.size.width * (awaitingReset ? 0 : showRemaining ? window.remainingPercent : window.usedPercent) / 100))
                 }
             }.frame(height: 6).accessibilityLabel(window.title)
-                .accessibilityValue("\(Int(window.usedPercent)) percent used")
-            TimelineView(.periodic(from: .now, by: 60)) { context in
+                .accessibilityValue(awaitingReset ? "Awaiting reset confirmation" : "\(Int(window.usedPercent)) percent used")
                 Text(window.resetDescription(now: context.date)).font(.caption).foregroundStyle(.secondary)
                     .help(window.resetsAt.map { $0.formatted(date: .complete, time: .shortened) } ?? "Provider did not report a reset")
             }

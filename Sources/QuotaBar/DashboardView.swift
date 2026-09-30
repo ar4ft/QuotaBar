@@ -20,10 +20,13 @@ struct DashboardView: View {
     @State private var renameAccount: Account?
     @State private var newName = ""
     @State private var deleting: Account?
+    @State private var historyAccount: Account?
+    @State private var availableOnly = false
     private var filtered: [Account] {
-        store.accounts.filter {
+        store.orderedAccounts.filter {
             (filter == nil || filter == .all || $0.provider.rawValue == filter?.rawValue) &&
-            (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || ($0.detail?.localizedCaseInsensitiveContains(search) ?? false))
+            (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || ($0.detail?.localizedCaseInsensitiveContains(search) ?? false)) &&
+            (!availableOnly || store.availability($0).status.isAvailable)
         }
     }
     var body: some View {
@@ -55,12 +58,16 @@ struct DashboardView: View {
                     header
                     HStack(spacing: 16) {
                         MetricTile(title: "CONNECTED", value: "\(filtered.count)", detail: "subscription accounts", symbol: "person.2")
-                        MetricTile(title: "UP TO DATE", value: "\(filtered.filter { $0.snapshot != nil && !$0.snapshot!.isStale && store.errors[$0.id] == nil }.count)", detail: "readings in the last 10 min", symbol: "checkmark.circle")
+                        MetricTile(title: "AVAILABLE", value: "\(filtered.filter { store.availability($0).status.isAvailable }.count)", detail: "accounts with allowance left", symbol: "checkmark.circle")
                         MetricTile(title: "NEXT RESET", value: nextReset, detail: "earliest upcoming window", symbol: "clock.arrow.circlepath")
                     }
                     HStack {
                         Text("YOUR ACCOUNTS").font(.system(size: 11, weight: .semibold)).tracking(1.5).foregroundStyle(.secondary)
                         Spacer()
+                        Toggle("Available only", isOn: $availableOnly).toggleStyle(.button).controlSize(.small)
+                        Picker("Sort accounts", selection: $store.accountSortRaw) {
+                            ForEach(AccountSort.allCases) { Text($0.title).tag($0.rawValue) }
+                        }.labelsHidden().frame(width: 175)
                         Picker("Layout", selection: $listLayout) {
                             Image(systemName: "square.grid.2x2").tag(false)
                             Image(systemName: "list.bullet").tag(true)
@@ -68,7 +75,8 @@ struct DashboardView: View {
                     }
                     if store.accounts.isEmpty { emptyState }
                     else if filtered.isEmpty {
-                        ContentUnavailableView.search(text: search)
+                        ContentUnavailableView("No matching accounts", systemImage: "line.3.horizontal.decrease.circle",
+                                               description: Text("Try another search or turn off the availability filter."))
                     } else if listLayout {
                         LazyVStack(spacing: 12) { ForEach(filtered) { account in card(account) } }
                     } else {
@@ -90,6 +98,7 @@ struct DashboardView: View {
             }
         }
         .sheet(item: $store.presentedConnection) { request in ConnectAccountView(request: request).environmentObject(store) }
+        .sheet(item: $historyAccount) { account in UsageHistoryView(account: account).environmentObject(store) }
         .alert("Rename account", isPresented: Binding(get: { renameAccount != nil }, set: { if !$0 { renameAccount = nil } })) {
             TextField("Account name", text: $newName)
             Button("Cancel", role: .cancel) { renameAccount = nil }
@@ -126,7 +135,8 @@ struct DashboardView: View {
     }
     private func card(_ account: Account) -> some View {
         AccountCard(account: account, error: store.errors[account.id], refreshing: store.refreshing.contains(account.id),
-                    showRemaining: store.showRemaining,
+                    showRemaining: store.showRemaining, availability: store.availability(account),
+                    history: { historyAccount = account },
                     refresh: { Task { await store.refresh(account.id) } }, reconnect: { store.connect(account) },
                     rename: { newName = account.name; renameAccount = account }, remove: { deleting = account })
     }

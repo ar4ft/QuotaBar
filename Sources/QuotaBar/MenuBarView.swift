@@ -26,7 +26,7 @@ struct MenuBarView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 0) {
-                        ForEach(store.accounts) { account in
+                        ForEach(store.orderedAccounts) { account in
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {
                                     Image(systemName: account.provider.symbol).foregroundStyle(account.provider.tint)
@@ -40,6 +40,7 @@ struct MenuBarView: View {
                                     Button { dashboard(); store.connect(account) } label: { Image(systemName: "person.crop.circle.badge.checkmark") }
                                         .buttonStyle(.plain).help("Reconnect \(account.name)")
                                 }
+                                Text(store.availability(account).status.title).font(.caption).foregroundStyle(.secondary)
                                 if let snapshot = account.snapshot {
                                     ForEach(snapshot.windows) { window in UsageMeter(window: window, tint: account.provider.tint, showRemaining: store.showRemaining) }
                                     if snapshot.isStale || store.errors[account.id] != nil {
@@ -73,7 +74,7 @@ struct MenuBarView: View {
 struct MenuBarLabel: View {
     @EnvironmentObject private var store: AccountStore
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 60)) { context in
+        TimelineView(.periodic(from: .now, by: 15)) { context in
             HStack(spacing: 5) {
                 Image(systemName: "chart.bar.xaxis")
                 if let account = store.pinnedAccount {

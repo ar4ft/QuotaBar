@@ -13,6 +13,10 @@ A native macOS app for keeping multiple OpenAI and Claude subscription accounts 
 - Pin an account's remaining allowance in the menu bar, choosing a specific window or the most constrained window.
 - Launch automatically when you sign in to macOS, using the system's Login Items registration.
 - Preserve the last reading when a request fails and identify stale readings. Respect `Retry-After` on rate limits.
+- Automatically refresh elapsed quota windows with bounded retries and rate-limit backoff.
+- Rank accounts by remaining main allowance or next reset, with an “Available only” filter.
+- Keep local sampled usage history, view native charts, and export CSV.
+- Distribute one universal app for Apple Silicon and Intel, as ZIP and drag-to-Applications DMG.
 - Store credentials in macOS Keychain. Account metadata contains labels, usage snapshots, and timestamps only.
 
 ## Build and run on your Mac
@@ -23,7 +27,7 @@ cd QuotaBar
 open dist/QuotaBar.app
 ```
 
-You can also open `Package.swift` in Xcode and run the `QuotaBar` executable scheme. The script builds and ad-hoc signs a `.app` bundle for local use and creates `dist/QuotaBar-macOS.zip`, preserving executable permissions for download. It does not notarize the app. Distribution needs your own bundle identity, Developer ID signature and notarization. Rebuilding an ad-hoc signed app may prompt for Keychain access again.
+You can also open `Package.swift` in Xcode and run the `QuotaBar` executable scheme. The script builds and ad-hoc signs a universal `.app` bundle (Apple Silicon + Intel), creates `dist/QuotaBar-macOS.zip` preserving executable permissions, and builds `dist/QuotaBar-macOS.dmg` with an Applications shortcut. It does not notarize the app. Distribution needs your own bundle identity, Developer ID signature and notarization. Rebuilding an ad-hoc signed app may prompt for Keychain access again.
 
 To test:
 
@@ -38,10 +42,37 @@ The included GitHub Actions workflow compiles the macOS app, runs tests, and pac
 Open **Settings** from the menu bar gear menu.
 
 - **Usage alerts:** enable notifications and accept the macOS notification permission prompt. Configure each account's 80% warning, 95% warning, and allowance recovery alert separately. Alerts are disabled globally until you enable them; per-account defaults enable all three once global notifications are on. macOS Focus and notification settings still control whether a banner is shown.
-- **Pinned allowance:** choose an account and a usage window, or use “Most constrained window.” You can also pin/unpin an account directly in the menu bar popover. The icon shows remaining allowance; `~` marks a stale/error reading or a reset that needs a fresh reading, and `—` means the chosen window has no reading. The dashboard's consumed/remaining preference does not change the pin's meaning.
+- **Pinned allowance:** choose an account and a usage window, or use “Most constrained window.” You can also pin/unpin an account directly in the menu bar popover. The icon shows remaining allowance; `~` marks a stale/error reading, and `—` means the chosen window has no reading or has crossed a reset that needs confirmation. The dashboard's consumed/remaining preference does not change the pin's meaning.
 - **Launch at login:** move the packaged `QuotaBar.app` into `/Applications`, then enable the toggle. If macOS requires approval, open Login Items from the provided button. The displayed toggle reflects system registration, including changes made in System Settings. A raw Swift package executable cannot register for these OS features.
 
 Warning receipts are saved with account metadata, separately for each window and reset cycle. If a reading jumps past both warning thresholds, only the higher warning is sent. A refresh confirming exhaustion has ended can send a recovery alert; a confirmed new cycle with usage falling from at least 80% can also send one. A countdown alone never sends a recovery alert. Without a reported reset timestamp, threshold/recovery alerts stay deduplicated until a confirmed cycle change or account reconnection. Multiple alerts from one account reading are grouped in one notification. Reconnecting preserves the account's alert preferences; removing the account clears its pin and delivered notifications.
+
+## Availability and usage history
+
+The dashboard and menu bar default to sorting by **Most allowance left**. The score is the minimum remaining allowance across reported main session/weekly windows. Code-review and model-specific windows are shown individually and are not used to claim the whole account is unavailable. Failed, stale, missing, and expired-reset readings have no allowance score. A missing main quota remains unknown. **Available only** includes accounts with a fresh main quota reading and some allowance left. Percentages across different subscriptions are not interchangeable token balances.
+
+Click **History** on an account card to see sampled consumption for a chosen window over 24 hours, 7 days, or 30 days. **Export CSV · all windows** exports the selected date range for every reported window, including observation/reset timestamps and a reading-status column. Expired-window readings are marked `awaiting_reset` in CSV and excluded from the chart. Graph lines break across observed resets, missing windows, and gaps longer than one hour.
+
+History is separate from credentials, under `~/Library/Application Support/QuotaBar/History`, with owner-only permissions. Readings are coalesced into five-minute buckets, preserving observed cycle changes, retained for up to 30 days, and capped at 4,096 snapshots per account. Under heavy use, the cap may retain fewer than 30 days. Nothing is backfilled while the app is closed. Corrupt history is preserved with an error instead of silently overwritten. History can be cleared independently; removing an account also removes its history.
+
+A background clock checks for elapsed resets every 15 seconds while the app is running, in addition to scheduled polling. Unconfirmed reset retries back off from 30 seconds to 15 minutes, and provider `Retry-After` takes precedence. Passed-reset bars and pinned values show a dash until a fresh provider reading confirms the new window. The app keeps monitoring when the dashboard is closed.
+
+## Comparison with Janus
+
+Reviewed [Janus](https://github.com/RamitVishwakarma/Janus/tree/b29c843) at commit `b29c843` on September 30, 2026, using its README and account models. This comparison describes that revision, not every future Janus release.
+
+| Capability | QuotaBar | Janus at the reviewed revision |
+| --- | --- | --- |
+| Add accounts without displacing your normal CLI sign-in | Isolated Codex device login; isolated Claude web sign-in; explicit file import | Save a session signed in through the CLI; additional accounts are captured after changing CLI login |
+| Background provider refresh | Configurable polling for both providers, plus elapsed-reset refresh with bounded retries | Manual refresh; Claude also fetches when a reset is crossed; Codex figures come from manual refresh |
+| Consumption notifications | Per-account 80%/95% warnings and confirmed recovery; receipts survive relaunch | Not present in the reviewed source |
+| Menu bar information | Pin remaining allowance for an account/window | Shows the live account |
+| Usage history and export | Local charts and CSV with observation/reset metadata | Not present in the reviewed source |
+| Find accounts with allowance | Ranked main-quota availability, search/filter, card/list views | Account list with main usage bars and manual ordering |
+| Start at login | Native system registration and approval status in Settings | README describes adding the app to Login Items manually |
+| Apple Silicon and Intel distribution | Universal ZIP and DMG artifacts, validated by CI | Universal app/DMG, GitHub releases and Homebrew cask |
+
+Janus's live-session switching and cache cleanup serve a different workflow from this consumption dashboard. It also supports renewing saved Claude OAuth credentials, whereas QuotaBar uses Claude web sessions or read-only OAuth imports. QuotaBar does not yet have Janus's Homebrew distribution channel. Neither app's ad-hoc builds provide Developer ID signing/notarization. QuotaBar's advantage here is independent account observation, alerts, availability and history; this is not a claim of superiority for every task.
 
 ## Connect OpenAI
 
@@ -80,7 +111,7 @@ Usage comes from provider-specific interfaces used by subscription clients:
 
 These are not stable public third-party subscription APIs. Providers may change response formats, permissions, client policies, or login support. The OpenAI sign-in uses the official CLI's device flow rather than claiming an arbitrary application can register a general “Sign in with OpenAI” OAuth client. No provider credentials were available here, so live login and live usage requests have not been tested.
 
-Missing windows remain unknown, never fabricated as 0%. Percentages reflect the last successful reading. Passing a reset timestamp does not assume that quota replenished; the app requests a new reading on its configured refresh interval. Enterprise or credit-only plans with no supported quota windows show an unrecognized usage response rather than invented allowance. Extra usage spend/credit balances are not displayed in this version.
+Missing windows remain unknown, never fabricated as 0%. Percentages reflect the last successful reading. Passing a reset timestamp does not assume that quota replenished; the app requests confirmation at the reset boundary and on its configured refresh interval. Enterprise or credit-only plans with no supported quota windows show an unrecognized usage response rather than invented allowance. Extra usage spend/credit balances are not displayed in this version.
 
 ## Implementation and verification
 
@@ -90,7 +121,7 @@ Missing windows remain unknown, never fabricated as 0%. Percentages reflect the 
 
 Swift is sufficient for all of these responsibilities. Rust would add a second toolchain and an FFI boundary without helping this app's current workload.
 
-The expanded core suite has 33 tests covering alert persistence and deduplication, confirmed resets, disabled preferences, metadata migration, and pinned allowance behavior in addition to provider parsing and requests. All 33 pass on Swift 6.0.3/Linux. Swift source syntax parsing also passes. Linux compiles only the app's unsupported-platform fallback; it cannot validate SwiftUI, WebKit, Keychain, or macOS UI behavior. The repository workflow compiles the macOS app, runs the full test suite, validates the distributable ZIP, and publishes the app artifact. Live authentication, Keychain behavior, and visual UI behavior still require the following smoke checks.
+The expanded core suite has 55 tests covering alert persistence and deduplication, confirmed resets, disabled preferences, metadata migration, and pinned allowance behavior in addition to provider parsing and requests. All 55 pass on Swift 6.0.3/Linux. Swift source syntax parsing also passes. Linux compiles only the app's unsupported-platform fallback; it cannot validate SwiftUI, WebKit, Keychain, or macOS UI behavior. The repository workflow compiles the macOS app, runs the full test suite, validates both executable architectures, the ZIP and DMG, and publishes both installers as the app artifact. Live authentication, Keychain behavior, and visual UI behavior still require the following smoke checks.
 
 ### macOS smoke checks
 
@@ -104,6 +135,9 @@ The expanded core suite has 33 tests covering alert persistence and deduplicatio
 8. In Settings, enable notifications. Check that per-account warning toggles persist after relaunch; verify real 80%/95% threshold alerts and confirmed recovery when provider usage changes. Revoking macOS notification permission should be reflected in Settings.
 9. Pin an account/window and confirm the menu bar percentage updates immediately. Reconnect, remove the pinned account, and test a stale/error reading. The icon should not imply unknown allowance is zero.
 10. Move the app to Applications, enable launch at login, and verify it appears in macOS Login Items. Sign out/in to check startup, then disable it and confirm registration is removed.
+11. Check availability ordering/filtering with healthy, exhausted, failed and expired readings. Code-review exhaustion should not hide an otherwise usable Codex account.
+12. Open History after several refreshes; test each date range/window, CSV export, relaunch persistence and clearing history. A reset should divide chart segments, and no data should be invented for closed-app periods.
+13. Install the DMG on both Apple Silicon and Intel Macs, or inspect the executable with `lipo -info`. Wait for a reported reset and confirm automatic refresh and temporary unknown values if confirmation is delayed.
 
 ## References
 

@@ -42,7 +42,7 @@ struct PreferencesView: View {
                         }
                     }
                 }
-                Text("Shows remaining allowance beside the menu bar icon. A ~ marks a stale reading; — means no reading is available.")
+                Text("Shows remaining allowance beside the menu bar icon. A ~ marks a stale reading; — means no reading or a reset awaiting confirmation.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Usage alerts") {

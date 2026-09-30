@@ -19,10 +19,14 @@ jobs:
       - name: Validate distributable
         run: |
           test -x dist/QuotaBar.app/Contents/MacOS/QuotaBar
+          lipo -verify_arch arm64 x86_64 dist/QuotaBar.app/Contents/MacOS/QuotaBar
+          test -s dist/QuotaBar-macOS.dmg
           unzip -tq dist/QuotaBar-macOS.zip
       - name: Publish macOS app artifact
         uses: actions/upload-artifact@v4
         with:
           name: QuotaBar-macOS
-          path: dist/QuotaBar-macOS.zip
+          path: |
+            dist/QuotaBar-macOS.zip
+            dist/QuotaBar-macOS.dmg
           if-no-files-found: error
