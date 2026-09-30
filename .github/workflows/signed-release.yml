@@ -33,7 +33,6 @@ jobs:
       SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
       RELEASE_TAG: ${{ inputs.tag }}
       NOTARY_KEYCHAIN_PROFILE: QuotaBar-notary
-      NOTARY_KEYCHAIN_PATH: ${{ runner.temp }}/QuotaBar-release.keychain-db
     steps:
       - uses: actions/checkout@v4
       - name: Validate release configuration
@@ -54,6 +53,7 @@ jobs:
         run: |
           set -euo pipefail
           signing_keychain="$RUNNER_TEMP/QuotaBar-release.keychain-db"
+          echo "NOTARY_KEYCHAIN_PATH=$signing_keychain" >> "$GITHUB_ENV"
           keychain_password="$(openssl rand -base64 32)"
           echo "::add-mask::$keychain_password"
           printf '%s' "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/QuotaBar-certificate.p12"
