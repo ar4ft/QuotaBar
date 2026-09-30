@@ -50,9 +50,11 @@ struct PolishPreviews {
                               backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: appearance)
         window.isReleasedWhenClosed = false
-        let hosting = NSHostingView(rootView: view.environment(\.colorScheme, dark ? .dark : .light))
+        let hosting = NSHostingView(rootView: view.environment(\.colorScheme, dark ? .dark : .light)
+            .background(Color(nsColor: .windowBackgroundColor)))
         hosting.frame = NSRect(origin: .zero, size: size)
         window.contentView = hosting
+        NSApplication.shared.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         RunLoop.main.run(until: Date().addingTimeInterval(0.75))
         hosting.layoutSubtreeIfNeeded()

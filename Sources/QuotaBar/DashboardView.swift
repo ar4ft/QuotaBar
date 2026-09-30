@@ -55,7 +55,7 @@ struct DashboardView: View {
                               systemImage: "network")
                     }.buttonStyle(.plain).foregroundStyle(.secondary)
                     ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 12) { metrics }
+                        HStack(alignment: .top, spacing: 12) { metrics }
                         VStack(spacing: 12) { metrics }
                     }
                     ViewThatFits(in: .horizontal) {
@@ -69,7 +69,7 @@ struct DashboardView: View {
                     } else if listLayout {
                         LazyVStack(spacing: 12) { ForEach(filtered) { account in card(account) } }
                     } else {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], alignment: .leading, spacing: 16) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16, alignment: .top)], alignment: .leading, spacing: 16) {
                             ForEach(filtered) { account in card(account) }
                         }
                     }
@@ -153,9 +153,10 @@ struct DashboardView: View {
     }
     private var nextReset: String {
         guard let date = filtered.flatMap({ $0.snapshot?.windows ?? [] }).compactMap(\.resetsAt).filter({ $0 > Date() }).min() else { return "—" }
-        let hours = max(1, Int(ceil(date.timeIntervalSinceNow / 3600)))
-        if hours >= 24 { return "\(hours / 24)d \(hours % 24)h" }
-        return "\(hours)h"
+        let minutes = max(1, Int(ceil(date.timeIntervalSinceNow / 60)))
+        if minutes >= 1440 { return "\(minutes / 1440)d \((minutes % 1440) / 60)h" }
+        if minutes >= 60 { return "\(minutes / 60)h \(minutes % 60)m" }
+        return "\(minutes)m"
     }
 }
 
@@ -171,7 +172,7 @@ private struct MetricTile: View {
                 Spacer(); Image(systemName: symbol).foregroundStyle(.secondary).accessibilityHidden(true)
             }
             Text(value).font(.title.weight(.semibold)).monospacedDigit()
-            Text(detail).font(.caption).foregroundStyle(.secondary)
+            Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2, reservesSpace: true)
         }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
             .modifier(AccountSurface())
             .accessibilityElement(children: .ignore)
