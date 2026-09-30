@@ -38,6 +38,7 @@ final class AccountStore: ObservableObject {
     private let client = UsageClient()
     private var cooldowns: [UUID: Date] = [:]
     private var timerTask: Task<Void, Never>?
+    private var scheduledRefreshTask: Task<Void, Never>?
     private var writable = true
     private var epoch: [UUID: UUID] = [:]
     var metadataURL: URL { root.appendingPathComponent("accounts.json") }
@@ -63,7 +64,7 @@ final class AccountStore: ObservableObject {
         guard timerTask == nil else { return }
         timerTask = Task { [weak self] in
             await self?.refreshNotificationAuthorization()
-            await self?.refreshAll()
+            self?.scheduleRefresh(allAccounts: true)
             var lastPeriodicRefresh = Date()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(15))
@@ -71,10 +72,20 @@ final class AccountStore: ObservableObject {
                 let now = Date(); self?.clock = now
                 let interval = min(60, max(1, self?.refreshMinutes ?? 5)) * 60
                 if now.timeIntervalSince(lastPeriodicRefresh) >= Double(interval) {
-                    await self?.refreshAll(); lastPeriodicRefresh = Date()
-                } else { await self?.refreshExpiredWindows() }
+                    if self?.scheduleRefresh(allAccounts: true) == true { lastPeriodicRefresh = now }
+                } else { self?.scheduleRefresh(allAccounts: false) }
             }
         }
+    }
+    @discardableResult
+    private func scheduleRefresh(allAccounts: Bool) -> Bool {
+        guard scheduledRefreshTask == nil else { return false }
+        scheduledRefreshTask = Task { [weak self] in
+            defer { self?.scheduledRefreshTask = nil }
+            if allAccounts { await self?.refreshAll() }
+            else { await self?.refreshExpiredWindows() }
+        }
+        return true
     }
     func add(name: String, provider: Provider, credential: Credential, replacing: UUID? = nil) async throws {
         guard writable else { throw CocoaError(.fileWriteNoPermission) }
