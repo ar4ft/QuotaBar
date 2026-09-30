@@ -1,0 +1,20 @@
+name: macOS build
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: xcrun swift --version
+      - name: Core tests and app compilation
+        run: xcrun swift test
+      - name: Build app bundle
+        run: ./scripts/build-app.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QuotaBar-macOS
+          path: dist/QuotaBar.app
