@@ -5,7 +5,7 @@ on:
       tag:
         description: Release tag matching the app version
         required: true
-        default: v0.6.0
+        default: v0.7.0
         type: string
       publish:
         description: Publish signed installers and update feed as a GitHub Release

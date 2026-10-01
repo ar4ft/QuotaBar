@@ -72,7 +72,7 @@ Reviewed [Janus](https://github.com/RamitVishwakarma/Janus/tree/b29c843) at comm
 | Start at login | Native system registration and approval status in Settings | README describes adding the app to Login Items manually |
 | Apple Silicon and Intel distribution | Universal ZIP and DMG artifacts, validated by CI | Universal app/DMG, GitHub releases and Homebrew cask |
 
-Janus's live-session switching and cache cleanup serve a different workflow from this consumption dashboard. It also supports renewing saved Claude OAuth credentials, whereas QuotaBar uses Claude web sessions or read-only OAuth imports. QuotaBar does not yet have Janus's Homebrew distribution channel. The compared development builds do not provide Developer ID signing/notarization. QuotaBar's advantage here is independent account observation, alerts, availability and history; this is not a claim of superiority for every task.
+QuotaBar now also switches saved Codex and Claude Code sessions; Janus additionally offers cache cleanup. It also supports renewing saved Claude OAuth credentials, whereas QuotaBar uses Claude web sessions or read-only OAuth imports. QuotaBar does not yet have Janus's Homebrew distribution channel. The compared development builds do not provide Developer ID signing/notarization. QuotaBar's advantage here is independent account observation, alerts, availability and history; this is not a claim of superiority for every task.
 
 ## Connect OpenAI
 
@@ -85,7 +85,7 @@ The app invokes the CLI directly, without a shell, with a fresh private `CODEX_H
 
 Each login uses its own folder under `~/Library/Application Support/QuotaBar`. After login, credentials move to Keychain and the temporary folder is deleted. Normal cancellation deletes it after the child exits; a crash or forced termination can leave a `Login-*` directory, which you can remove after quitting QuotaBar. This is a minimal authentication shadow home; it does not clone your usual Codex configuration, sessions, or projects, or change `~/.codex`.
 
-For these app-owned sessions, an expired access token triggers one refresh via Codex's OAuth token endpoint. Rotated tokens are saved to Keychain before another usage request. Imported `auth.json` credentials intentionally do not carry a refresh token: reconnect or re-import a fresh file when they expire so QuotaBar cannot rotate another client's token.
+For these app-owned sessions, an expired access token triggers one refresh via Codex's OAuth token endpoint. Rotated tokens are saved to Keychain before another usage request. Imported sessions retain their complete authentication payload in Keychain for switching, but never grant QuotaBar refresh ownership. Once an app-owned sign-in is handed off to a client, QuotaBar also stops rotating that session's refresh token. Reconnect or let the client renew it when needed.
 
 **Import credentials** lets you select an existing Codex `auth.json` instead. Press Cmd-Shift-G in the file chooser to reach hidden folders such as `~/.codex`.
 
@@ -93,13 +93,41 @@ For these app-owned sessions, an expired access token triggers one refresh via C
 
 Click **Add account → Claude → Sign in to Claude**. A new, nonpersistent WebKit cookie store is created for every attempt, independent of Safari and other accounts. The app captures the authenticated `sessionKey` and saves it to Keychain. It fetches the account's organizations and asks you to choose if there is more than one.
 
-Some identity providers or bot challenges reject embedded browser login or subsequent native HTTP requests. In that case, use **Import credentials** to select a Claude Code `.credentials.json` containing `claudeAiOauth.accessToken` (typically `~/.claude/.credentials.json` on file-backed installations). Installations that keep credentials solely in Claude Code's Keychain entry do not expose this file; this version does not automatically read another app's Keychain entries. Imported tokens need the provider's usage/profile scope. Reconnect when the session expires; this app does not rotate Claude Code's refresh token.
+Some identity providers or bot challenges reject embedded browser login or subsequent native HTTP requests. In that case, use **Import credentials** to select a Claude Code `.credentials.json` containing `claudeAiOauth.accessToken` (typically `~/.claude/.credentials.json` on file-backed installations). Installations that keep credentials solely in Claude Code's Keychain entry do not expose this file; use **Save current CLI sign-in** to explicitly capture that entry and the CLI account identity. macOS may request permission. Imported tokens need the provider's usage/profile scope. Reconnect when the session expires; this app does not rotate Claude Code's refresh token.
 
 Claude OAuth and web sessions both support multiple saved accounts. Claude web sessions are long-lived but can be revoked or expire.
 
+## Switch between subscriptions
+
+Use **Use this account…** from an account card’s menu, or the switching button beside an account in the menu bar. Close the provider’s CLI, desktop app, and editor sessions first. QuotaBar refuses a switch when it detects the affected client running. Start a new session after switching; an existing conversation does not move to another account. Environment variables, API-key helpers, managed policies, and client-specific profiles can override a saved login: verify `codex login status` or Claude Code `/status` before working.
+
+- **Codex:** fresh OpenAI logins and complete imported `auth.json` sessions can be switched into a selected Codex home, defaulting to `$CODEX_HOME` visible to QuotaBar or `~/.codex`. The target must use file-backed credentials. A GUI app does not automatically inherit variables from your shell, so enter a custom home in the switching sheet when necessary. Keyring/Keychain/auto backends are rejected rather than silently writing credentials the client might ignore. Configuration, conversations, and projects are not swapped.
+- **Claude Code:** sign in with `claude auth login`, close its sessions, then **Add account → Claude → Save current CLI sign-in**. Repeat for another subscription without calling logout to revoke a saved login. The default macOS `Claude Code-credentials` Keychain entry, or an existing file-backed `.credentials.json`, is captured with the account identity from `.claude.json`. Switching preserves current machine/project preferences while replacing account identity. Complete imported OAuth sessions need `user:inference`; a web session cookie or usage-only OAuth token cannot authenticate Claude Code. Custom `CLAUDE_CONFIG_DIR` Keychain profiles are not switched by this version. Conflicting file and Keychain credentials are preserved and reported.
+- **Existing accounts:** accounts saved before 0.7.0 do not have a complete native session. Reconnect OpenAI or use **Reconnect → Save current CLI sign-in** for Claude Code. Monitoring logins remain available independently.
+
+The outgoing session is saved before credentials are replaced, including any rotated tokens. Unknown outgoing subscription accounts are added to the dashboard instead of discarded. Complete client payloads and the last recovery backup live in Keychain; account metadata and usage history contain no secrets. File writes use private temporary files and atomic rename with mode `0600`; symbolic links are rejected. A failed multi-part switch attempts to restore the exact previous credential/settings bytes. **Restore previous sign-in** recovers the last encrypted backup, including an originally signed-out state. QuotaBar never calls provider logout or revokes a saved session during switching.
+
+After handing a session to a client, QuotaBar leaves token renewal to that client and reads its current tokens when monitoring the selected account. Inactive client-owned sessions may need a fresh client login when their access tokens expire. The “Selected for CLI” badge records QuotaBar’s last successful switch, not a live assertion about every client process. Changing accounts outside QuotaBar can make it outdated; capture the current sign-in to reconcile it. Removing a dashboard account does not log the client out or delete recovery backups.
+
+### Desktop and editor compatibility review
+
+| Client | How to use another subscription |
+| --- | --- |
+| Codex CLI and Codex IDE extension | Official documentation says they share cached authentication. Switch the matching file-backed home, then restart the client/extension and verify its account. |
+| Legacy standalone Codex desktop | Some versions may read the shared Codex home, but this was not verified with a live installation. Reopen and confirm the account; there is no universal automatic desktop-switch guarantee. |
+| Current ChatGPT desktop / Codex desktop experience | OpenAI’s current documentation describes desktop browser sign-in separately from CLI/IDE cached credentials. Use the app’s account controls or sign in again. QuotaBar offers an open-app shortcut, not desktop credential injection. |
+| Claude Code CLI / CLI-backed editor sessions | Default-profile switching is implemented. Restart the session; editor-specific configuration or credential environment variables can select a different login. |
+| Claude Desktop, including its Code surface | Anthropic documents a separate OAuth login and explicitly says desktop sessions do not read CLI credential environment variables. Use the desktop app’s account controls. |
+| Browser use of ChatGPT and Claude | Separate Safari/Chrome browser profiles keep both subscriptions signed in concurrently. This is a browser alternative, not switching a native desktop app. |
+| Strict native desktop isolation | Separate macOS user accounts isolate each user’s app data and Keychain. Fast User Switching changes the whole desktop, so this is more cumbersome than CLI account switching. |
+
+Research sources: [OpenAI authentication](https://developers.openai.com/codex/auth/), [OpenAI desktop settings](https://developers.openai.com/codex/app/settings/), [Codex credential storage source](https://github.com/openai/codex/blob/main/codex-rs/login/src/auth/storage.rs), and [Claude Code authentication](https://code.claude.com/docs/en/authentication). Janus’s session-switching behavior was reviewed as a comparison; this implementation is written independently in Swift. Copying arbitrary Electron profile folders, cookies, or app Keychain entries is not offered as desktop switching because it is not a documented cross-client login mechanism.
+
+Switch transaction tests cover preserving rotated credentials, workspace identity, backup failure, partial writes, concurrent changes, rollback/recovery, absent logins, preference preservation, and private file writes/symlink rejection. No real provider credentials or macOS desktop login sessions were available here: validate both live CLI switching and the exact desktop versions you use before treating a session as switched.
+
 ## Scope and provider compatibility
 
-OpenAI usage is **Codex subscription allowance**, not a universal meter for every ChatGPT feature. API billing and subscription quotas are different; an API key cannot report ChatGPT/Codex or Claude subscription allowance. The app does not calculate API spend, route requests, run prompts, or switch another app's active account.
+OpenAI usage is **Codex subscription allowance**, not a universal meter for every ChatGPT feature. API billing and subscription quotas are different; an API key cannot report ChatGPT/Codex or Claude subscription allowance. The app does not calculate API spend, route requests, or run prompts. It can switch supported local Codex and Claude Code subscription sessions; native desktop account switching is separate.
 
 Usage comes from provider-specific interfaces used by subscription clients:
 
@@ -180,7 +208,7 @@ Create repository or `release` environment secrets in GitHub Settings → Secret
 
 Do not commit private keys or passwords. Keep a backup of the Sparkle key so existing installations can trust future releases.
 
-Run **Actions → Signed macOS release → Run workflow**, with a tag matching the bundle version (currently `v0.6.0`). The default **publish=false** creates a `QuotaBar-macOS-signed` artifact with notarized ZIP/DMG and signed `appcast.xml`. Inspect that artifact first. Set **publish=true** for a subsequent run when ready to publish a GitHub Release; it creates the tag at the built commit, uploads the three files, and marks that release latest. Publishing uses the GitHub workflow token. No release is published by the normal push/PR workflow.
+Run **Actions → Signed macOS release → Run workflow**, with a tag matching the bundle version (currently `v0.7.0`). The default **publish=false** creates a `QuotaBar-macOS-signed` artifact with notarized ZIP/DMG and signed `appcast.xml`. Inspect that artifact first. Set **publish=true** for a subsequent run when ready to publish a GitHub Release; it creates the tag at the built commit, uploads the three files, and marks that release latest. Publishing uses the GitHub workflow token. No release is published by the normal push/PR workflow.
 
 The app uses `https://github.com/ar4ft/QuotaBar/releases/latest/download/appcast.xml`. A release must have both that feed and its signed ZIP available. `CFBundleVersion` must increase for every update. Publishing a non-update-enabled release as latest would interrupt that feed; use this workflow for public releases. The script validates matching public/private keys and the release tag, signs nested framework helpers, notarizes/staples the app and DMG, and deletes the temporary signing keychain and certificate afterward. Notarization and an end-to-end older-version update still need validation with your credentials.
 

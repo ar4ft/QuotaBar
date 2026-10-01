@@ -15,6 +15,8 @@ struct AccountCard: View {
     let reconnect: () -> Void
     let rename: () -> Void
     let remove: () -> Void
+    let useAccount: () -> Void
+    let selectedForClient: Bool
     var body: some View {
         Group {
         if presentationMode {
@@ -38,6 +40,8 @@ struct AccountCard: View {
                 }
                 Spacer()
                 Menu {
+                    Button("Use this account…", action: useAccount)
+                    Divider()
                     Button("Refresh", action: refresh)
                     Button("Reconnect…", action: reconnect)
                     Button("Rename…", action: rename)
@@ -48,6 +52,10 @@ struct AccountCard: View {
                     .accessibilityLabel("Actions for " + account.name).help("Account actions")
             }
             AccountStatusLabel(status: availability.status)
+            if selectedForClient {
+                Label("Selected for \(account.provider == .openAI ? "Codex" : "Claude Code")", systemImage: "person.crop.circle.badge.checkmark")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if let snapshot = account.snapshot {
                 CreditSummary(snapshot: snapshot, provider: account.provider)
                 ForEach(snapshot.windows) { window in

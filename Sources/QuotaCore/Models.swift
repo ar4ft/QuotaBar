@@ -86,6 +86,10 @@ public struct Credential: Codable, Sendable {
     public var accountID: String?
     public var email: String?
     public var refreshToken: String?
+    // Complete client sessions stay in Keychain, never in account metadata.
+    public var nativeSession: Data?
+    public var clientSettings: Data?
+    public var externallyManaged: Bool?
     public init(kind: CredentialKind, secret: String, accountID: String? = nil, email: String? = nil, refreshToken: String? = nil) {
         self.kind = kind; self.secret = secret; self.accountID = accountID; self.email = email
         self.refreshToken = refreshToken

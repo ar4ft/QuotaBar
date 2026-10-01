@@ -100,6 +100,7 @@ struct DashboardView: View {
             if hidden { search = ""; availableOnly = false; renameAccount = nil; deleting = nil; historyAccount = nil }
         }
         .sheet(item: $store.presentedConnection) { request in ConnectAccountView(request: request).environmentObject(store) }
+        .sheet(item: $store.presentedSwitch) { account in ClientSwitchView(account: account).environmentObject(store) }
         .sheet(isPresented: $store.showConnectionHealth) { ConnectionHealthView().environmentObject(store) }
         .sheet(item: $historyAccount) { account in UsageHistoryView(account: account).environmentObject(store) }
         .alert("Rename account", isPresented: Binding(get: { renameAccount != nil }, set: { if !$0 { renameAccount = nil } })) {
@@ -146,7 +147,8 @@ struct DashboardView: View {
                     showRemaining: store.showRemaining, presentationMode: store.presentationMode, forecast: store.forecast(account), availability: store.availability(account),
                     history: { historyAccount = account },
                     refresh: { Task { await store.refresh(account.id) } }, reconnect: { store.connect(account) },
-                    rename: { newName = account.name; renameAccount = account }, remove: { deleting = account })
+                    rename: { newName = account.name; renameAccount = account }, remove: { deleting = account },
+                    useAccount: { store.requestSwitch(account) }, selectedForClient: store.activeAccountID(account.provider) == account.id.uuidString)
     }
     private func count(_ item: AccountFilter) -> Int {
         store.accounts.filter { item == .all || $0.provider.rawValue == item.rawValue }.count

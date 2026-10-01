@@ -74,6 +74,18 @@ struct ConnectAccountView: View {
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Divider()
+            Button("Save current CLI sign-in") {
+                saving = true; error = nil
+                Task {
+                    do {
+                        try await store.saveCurrentClient(provider: provider, name: name, replacing: request.account?.id)
+                        dismiss()
+                    } catch { self.error = error.localizedDescription }
+                    saving = false
+                }
+            }.disabled(login.running || saving)
+            Text("Sign in with \(provider == .openAI ? "Codex" : "Claude Code"), close its sessions, then save the current sign-in here. This retains the complete client session for account switching; macOS may ask for Keychain access.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button("Import credentials…") { importing = true }.disabled(login.running || saving)
                 Text(provider == .openAI ? "Select Codex auth.json" : "Select Claude Code .credentials.json")

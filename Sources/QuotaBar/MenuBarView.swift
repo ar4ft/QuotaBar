@@ -33,6 +33,10 @@ struct MenuBarView: View {
                                     Image(systemName: account.provider.symbol).foregroundStyle(account.provider.tint).accessibilityHidden(true)
                                     Text(store.presentationMode ? account.provider.title + " account" : account.name).font(.headline).lineLimit(1)
                                     Spacer()
+                                    Button { dashboard(); store.requestSwitch(account) } label: {
+                                        Label("Use this account", systemImage: "arrow.left.arrow.right")
+                                    }.buttonStyle(.borderless).labelStyle(.iconOnly).help("Use this account in the CLI")
+                                        .disabled(store.presentationMode).accessibilityLabel("Use \(account.name) in \(account.provider == .openAI ? "Codex" : "Claude Code")")
                                     Button {
                                         store.pinAccount(store.pinnedAccountID == account.id.uuidString ? "" : account.id.uuidString)
                                     } label: {
@@ -47,6 +51,9 @@ struct MenuBarView: View {
                                     Text("Account details and balances hidden").font(.caption).foregroundStyle(.secondary)
                                 } else {
                                     AccountStatusLabel(status: store.availability(account).status)
+                                    if store.activeAccountID(account.provider) == account.id.uuidString {
+                                        Label("Selected for CLI", systemImage: "person.crop.circle.badge.checkmark").font(.caption).foregroundStyle(.secondary)
+                                    }
                                     if let snapshot = account.snapshot {
                                         CreditSummary(snapshot: snapshot, provider: account.provider)
                                         ForEach(snapshot.windows) { window in UsageMeter(window: window, tint: account.provider.tint, showRemaining: store.showRemaining) }

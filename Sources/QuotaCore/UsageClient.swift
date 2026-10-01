@@ -76,7 +76,8 @@ public struct UsageClient: Sendable {
     // Only credentials created in this app's own Codex home carry a refresh token.
     // Imported tokens are read-only to avoid rotating another app's credentials.
     public func refreshOwnedCodex(_ credential: Credential) async throws -> Credential {
-        guard credential.kind == .codex, let refreshToken = credential.refreshToken else { throw QuotaError.unauthorized }
+        guard credential.kind == .codex, credential.externallyManaged != true,
+              let refreshToken = credential.refreshToken else { throw QuotaError.unauthorized }
         var request = URLRequest(url: URL(string: "https://auth.openai.com/oauth/token")!)
         request.httpMethod = "POST"; request.timeoutInterval = 30
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -87,9 +88,7 @@ public struct UsageClient: Sendable {
         let data = try await checked(request)
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let token = json["access_token"] as? String, !token.isEmpty else { throw QuotaError.malformedResponse }
-        var updated = credential
-        updated.secret = token; updated.refreshToken = json["refresh_token"] as? String ?? refreshToken
-        return updated
+        return try ClientSession.updatingCodex(credential, response: json)
     }
 
     private func request(_ url: URL, credential: Credential) -> URLRequest {

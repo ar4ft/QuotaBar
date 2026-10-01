@@ -14,16 +14,20 @@ public enum CredentialParser {
             }
             let claims = jwtClaims(tokens["id_token"] as? String ?? token)
             let auth = claims?["https://api.openai.com/auth"] as? [String: Any]
-            return Credential(kind: .codex, secret: token,
+            var credential = Credential(kind: .codex, secret: token,
                               accountID: tokens["account_id"] as? String ?? auth?["chatgpt_account_id"] as? String,
                               email: claims?["email"] as? String,
                               refreshToken: ownsLogin ? tokens["refresh_token"] as? String : nil)
+            credential.nativeSession = data
+            return credential
         case .claude:
             let oauth = root["claudeAiOauth"] as? [String: Any] ?? root
             guard let token = oauth["accessToken"] as? String, !token.isEmpty else {
                 throw QuotaError.invalidCredentials
             }
-            return Credential(kind: .claudeOAuth, secret: token)
+            var credential = Credential(kind: .claudeOAuth, secret: token)
+            if root["claudeAiOauth"] != nil { credential.nativeSession = data }
+            return credential
         }
     }
     // Claims are used only as display metadata, never as a signature or authorization check.

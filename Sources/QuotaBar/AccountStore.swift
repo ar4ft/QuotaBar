@@ -11,10 +11,15 @@ final class AccountStore: ObservableObject {
     @Published var globalError: String?
     @Published var showConnectionHealth = false
     @Published var presentedConnection: ConnectionRequest?
+    @Published var presentedSwitch: Account?
+    @Published var switchMessage: String?
+    @AppStorage("codexSwitchHome") var codexSwitchHome = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory() + "/.codex"
+    @AppStorage("activeCodexAccount") var activeCodexAccount = "" { willSet { objectWillChange.send() } }
+    @AppStorage("activeClaudeAccount") var activeClaudeAccount = "" { willSet { objectWillChange.send() } }
     @AppStorage("refreshMinutes") var refreshMinutes = 5 { willSet { objectWillChange.send() } }
     @AppStorage("presentationMode") var presentationMode = false {
         willSet { objectWillChange.send() }
-        didSet { if presentationMode { presentedConnection = nil; Task { await notifications.clearAll() } } }
+        didSet { if presentationMode { presentedConnection = nil; presentedSwitch = nil; switchMessage = nil; Task { await notifications.clearAll() } } }
     }
     @AppStorage("showRemaining") var showRemaining = false { willSet { objectWillChange.send() } }
     @AppStorage("notificationsEnabled") var notificationsEnabled = false { willSet { objectWillChange.send() } }
@@ -121,7 +126,8 @@ final class AccountStore: ObservableObject {
         }
         return true
     }
-    func add(name: String, provider: Provider, credential: Credential, replacing: UUID? = nil) async throws {
+    @discardableResult
+    func add(name: String, provider: Provider, credential: Credential, replacing: UUID? = nil) async throws -> UUID {
         guard writable else { throw CocoaError(.fileWriteNoPermission) }
         var account = Account(id: replacing ?? UUID(), provider: provider, name: name, detail: credential.email)
         account.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -143,6 +149,7 @@ final class AccountStore: ObservableObject {
         // Wait for an older request to finish before refreshing the replacement.
         while refreshing.contains(account.id) { try await Task.sleep(for: .milliseconds(100)) }
         await refresh(account.id)
+        return account.id
     }
     func rename(_ id: UUID, name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -187,9 +194,18 @@ final class AccountStore: ObservableObject {
         defer { refreshing.remove(id) }
         do {
             var credential = try vault.load(id: id)
+            if credential.externallyManaged == true,
+               let account = accounts.first(where: { $0.id == id }),
+               activeAccountID(account.provider) == id.uuidString {
+                let storage = try NativeClientStorage(provider: account.provider, codexHome: codexSwitchHome)
+                if let live = try storage.read(), try live.belongs(to: credential) {
+                    credential = try live.credential()
+                    try vault.save(credential, id: id)
+                }
+            }
             var snapshot: UsageSnapshot
             do { snapshot = try await client.fetch(credential) }
-            catch QuotaError.unauthorized where credential.refreshToken != nil {
+            catch QuotaError.unauthorized where credential.refreshToken != nil && credential.externallyManaged != true {
                 // Serialize per account, then persist rotated credentials before another usage request.
                 credential = try await client.refreshOwnedCodex(credential)
                 guard epoch[id] == generation else { return }
@@ -289,6 +305,99 @@ final class AccountStore: ObservableObject {
             } else { notificationsEnabled = notificationsAuthorized }
             if !notificationsEnabled { notificationError = "Allow QuotaBar notifications in System Settings → Notifications, then enable usage alerts." }
         } catch { notificationError = error.localizedDescription; notificationsEnabled = false }
+    }
+    func activeAccountID(_ provider: Provider) -> String {
+        provider == .openAI ? activeCodexAccount : activeClaudeAccount
+    }
+    func requestSwitch(_ account: Account) {
+        guard !isPreview, !presentationMode else { return }
+        switchMessage = nil; presentedSwitch = account
+    }
+    func saveCurrentClient(provider: Provider, name: String, replacing: UUID? = nil) async throws {
+        guard !isPreview, !presentationMode, writable else { throw CocoaError(.fileWriteNoPermission) }
+        try NativeClientStorage.ensureStopped(provider)
+        let storage = try NativeClientStorage(provider: provider, codexHome: codexSwitchHome)
+        guard let session = try storage.read() else { throw ClientSwitchError.incompleteSession }
+        let credential = try session.credential()
+        if let replacing, let previous = try? vault.load(id: replacing), previous.kind == credential.kind,
+           let id = previous.accountID, let currentID = credential.accountID, id != currentID {
+            throw NSError(domain: "QuotaBar", code: 3, userInfo: [NSLocalizedDescriptionKey:
+                "The current CLI sign-in belongs to a different account. Add it as a new account instead."])
+        }
+        let known = try matchingAccount(session)
+        let target = replacing ?? known?.id
+        let id = try await add(name: name, provider: provider, credential: credential, replacing: target)
+        setActive(id, provider: provider)
+    }
+    func switchClient(to account: Account) throws {
+        guard !isPreview, !presentationMode, writable else { throw CocoaError(.fileWriteNoPermission) }
+        guard !accounts.contains(where: { $0.provider == account.provider && refreshing.contains($0.id) }) else {
+            throw NSError(domain: "QuotaBar", code: 4, userInfo: [NSLocalizedDescriptionKey: "Wait for this provider’s usage refresh to finish, then switch."])
+        }
+        try NativeClientStorage.ensureStopped(account.provider)
+        let storage = try NativeClientStorage(provider: account.provider, codexHome: codexSwitchHome)
+        let saved = try vault.load(id: account.id)
+        var replacement = try ClientSession(credential: saved)
+        if let live = try storage.read(), try live.belongs(to: saved) { replacement = live }
+        let original = try storage.rawSnapshot()
+        try ClientSessionSwitch.perform(replacement, storage: storage) { previous in
+            let backup = ClientSecrets(service: "com.quotabar.client-backups", account: storage.backupKey)
+            try backup.write(JSONEncoder().encode(original))
+            if let previous { try saveDisplaced(previous) }
+            // The CLI owns token renewal once this session is handed off, even if the switch later fails.
+            var handedOff = try replacement.credential()
+            handedOff.externallyManaged = true
+            try vault.save(handedOff, id: account.id)
+        }
+        setActive(account.id, provider: account.provider)
+        switchMessage = "\(account.name) is selected for \(account.provider == .openAI ? "Codex" : "Claude Code"). Start a new CLI or editor session and verify its account before working. Desktop sign-in may be separate."
+    }
+    func restorePreviousClient(_ provider: Provider) throws {
+        guard !isPreview, !presentationMode, writable else { throw CocoaError(.fileWriteNoPermission) }
+        guard !accounts.contains(where: { $0.provider == provider && refreshing.contains($0.id) }) else {
+            throw NSError(domain: "QuotaBar", code: 4, userInfo: [NSLocalizedDescriptionKey: "Wait for usage refresh to finish before restoring."])
+        }
+        try NativeClientStorage.ensureStopped(provider)
+        let storage = try NativeClientStorage(provider: provider, codexHome: codexSwitchHome)
+        let vault = ClientSecrets(service: "com.quotabar.client-backups", account: storage.backupKey)
+        guard let data = try vault.read() else {
+            throw NSError(domain: "QuotaBar", code: 5, userInfo: [NSLocalizedDescriptionKey: "No previous sign-in backup exists for this client home."])
+        }
+        let previous = try JSONDecoder().decode(ClientBackup.self, from: data)
+        let current = try storage.rawSnapshot()
+        do { if let live = try storage.read() { try saveDisplaced(live) } }
+        catch QuotaError.invalidCredentials { /* Retain malformed current bytes in place until restoring the backup. */ }
+        catch ClientSwitchError.incompleteSession { /* A partial failed switch must still be recoverable. */ }
+        do { try storage.restoreRaw(previous) }
+        catch {
+            do { try storage.restoreRaw(current) }
+            catch { throw ClientSwitchError.rollbackFailed }
+            throw error
+        }
+        // Keep the original recovery backup intact; any valid outgoing session was saved above.
+        if provider == .openAI { activeCodexAccount = "" } else { activeClaudeAccount = "" }
+        if let session = try storage.read(), let known = try matchingAccount(session) { setActive(known.id, provider: provider) }
+        switchMessage = "Previous \(provider == .openAI ? "Codex" : "Claude Code") sign-in restored. Start a new client session."
+    }
+    private func setActive(_ id: UUID, provider: Provider) {
+        if provider == .openAI { activeCodexAccount = id.uuidString } else { activeClaudeAccount = id.uuidString }
+    }
+    private func matchingAccount(_ session: ClientSession) throws -> Account? {
+        for account in accounts where account.provider == session.provider {
+            let credential = try vault.load(id: account.id)
+            if try session.belongs(to: credential) { return account }
+        }
+        return nil
+    }
+    private func saveDisplaced(_ session: ClientSession) throws {
+        let credential = try session.credential()
+        if let known = try matchingAccount(session) { try vault.save(credential, id: known.id); return }
+        var account = Account(provider: session.provider, name: credential.email ?? "Saved CLI sign-in", detail: credential.email)
+        account.detail = credential.email ?? session.provider.subtitle
+        try vault.save(credential, id: account.id)
+        accounts.append(account)
+        do { try persist() }
+        catch { accounts.removeAll { $0.id == account.id }; try? vault.remove(id: account.id); throw error }
     }
     private func persist() throws {
         guard writable else { throw CocoaError(.fileWriteNoPermission) }
