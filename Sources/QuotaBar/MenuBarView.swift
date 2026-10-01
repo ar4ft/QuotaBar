@@ -36,7 +36,8 @@ struct MenuBarView: View {
                                     Button { dashboard(); store.requestSwitch(account) } label: {
                                         Label("Use this account", systemImage: "arrow.left.arrow.right")
                                     }.buttonStyle(.borderless).labelStyle(.iconOnly).help("Use this account in the CLI")
-                                        .disabled(store.presentationMode).accessibilityLabel("Use \(account.name) in \(account.provider == .openAI ? "Codex" : "Claude Code")")
+                                        .disabled(store.presentationMode)
+                                        .accessibilityLabel(store.presentationMode ? "Use account" : "Use \(account.name) in \(account.provider == .openAI ? "Codex" : "Claude Code")")
                                     Button {
                                         store.pinAccount(store.pinnedAccountID == account.id.uuidString ? "" : account.id.uuidString)
                                     } label: {
