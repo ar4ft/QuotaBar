@@ -111,7 +111,7 @@ struct DashboardView: View {
         .alert("Remove this account?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Cancel", role: .cancel) { deleting = nil }
             Button("Remove", role: .destructive) { if let account = deleting { store.remove(account.id) }; deleting = nil }
-        } message: { Text("This removes the account, its credentials from Keychain, and its recorded usage history.") }
+        } message: { Text("This removes the account, its saved QuotaBar credentials, and its recorded usage history. It does not sign the CLI out or delete recovery backups.") }
         .alert("Storage error", isPresented: Binding(get: { store.globalError != nil }, set: { if !$0 { store.globalError = nil } })) {
             Button("OK") { store.globalError = nil }
         } message: { Text(store.globalError ?? "") }

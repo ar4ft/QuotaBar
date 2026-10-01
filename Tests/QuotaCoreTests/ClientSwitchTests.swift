@@ -18,6 +18,10 @@ final class ClientSwitchTests: XCTestCase {
         XCTAssertThrowsError(try ClientSession(credential: Credential(kind: .claudeWeb, secret: "sessionKey")))
         XCTAssertThrowsError(try ClientSession(credential: Credential(kind: .codex, secret: "access")))
     }
+    func testClaudeUsageOnlyScopesCannotAuthenticateCode() {
+        XCTAssertThrowsError(try ClientSession(provider: .claude, authentication:
+            Data(#"{"claudeAiOauth":{"accessToken":"monitoring-token","scopes":["user:profile"]}}"#.utf8)))
+    }
     func testCodexRefreshUpdatesExportedTokensAndPreservesUnknownFields() throws {
         var credential = try CredentialParser.parse(codex("old").authentication, provider: .openAI, ownsLogin: true)
         credential = try ClientSession.updatingCodex(credential, response: ["access_token": "new", "refresh_token": "rotated", "id_token": "new-id"])
@@ -105,7 +109,8 @@ final class ClientSwitchTests: XCTestCase {
         XCTAssertNil(storage.value)
     }
     func testSecureFilePermissionsAndSymlinkRejection() throws {
-        let folder = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
+        // macOS presents its temp directory through /var, a system symlink; this test deliberately rejects links.
+        let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".quotabar-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { if FileManager.default.fileExists(atPath: folder.path) { try? FileManager.default.removeItem(at: folder) } }
         var stage = "writing a private credential file"

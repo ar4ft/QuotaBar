@@ -153,4 +153,15 @@ final class UsageClientTests: XCTestCase {
         XCTAssertEqual(refreshed.refreshToken, "rotated")
         XCTAssertEqual(refreshed.accountID, "acct")
     }
+    func testHandedOffSessionCannotRotateClientRefreshToken() async throws {
+        let mock = MockTransport([])
+        var credential = Credential(kind: .codex, secret: "client-access", refreshToken: "client-refresh")
+        credential.externallyManaged = true
+        do {
+            _ = try await UsageClient(transport: mock).refreshOwnedCodex(credential)
+            XCTFail("Client-owned refresh tokens must not be used by QuotaBar")
+        } catch { XCTAssertEqual(error as? QuotaError, .unauthorized) }
+        let requests = await mock.recorded()
+        XCTAssertTrue(requests.isEmpty)
+    }
 }

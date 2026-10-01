@@ -315,6 +315,9 @@ final class AccountStore: ObservableObject {
     }
     func saveCurrentClient(provider: Provider, name: String, replacing: UUID? = nil) async throws {
         guard !isPreview, !presentationMode, writable else { throw CocoaError(.fileWriteNoPermission) }
+        guard !accounts.contains(where: { $0.provider == provider && refreshing.contains($0.id) }) else {
+            throw NSError(domain: "QuotaBar", code: 4, userInfo: [NSLocalizedDescriptionKey: "Wait for this provider’s usage refresh to finish before capturing its sign-in."])
+        }
         try NativeClientStorage.ensureStopped(provider)
         let storage = try NativeClientStorage(provider: provider, codexHome: codexSwitchHome)
         guard let session = try storage.read() else { throw ClientSwitchError.incompleteSession }
@@ -365,9 +368,15 @@ final class AccountStore: ObservableObject {
         }
         let previous = try JSONDecoder().decode(ClientBackup.self, from: data)
         let current = try storage.rawSnapshot()
-        do { if let live = try storage.read() { try saveDisplaced(live) } }
-        catch QuotaError.invalidCredentials { /* Retain malformed current bytes in place until restoring the backup. */ }
-        catch ClientSwitchError.incompleteSession { /* A partial failed switch must still be recoverable. */ }
+        // Recovery must work even when a failed switch left malformed settings or authentication.
+        // Preserve those exact outgoing bytes in a separate encrypted slot before restoring anything.
+        try ClientSecrets(service: "com.quotabar.client-restore-backups", account: storage.backupKey)
+            .write(JSONEncoder().encode(current))
+        if let authentication = current.authentication,
+           let live = try? ClientSession(provider: provider, authentication: authentication, settings: current.settings) {
+            try saveDisplaced(live)
+        }
+        guard try storage.rawSnapshot() == current else { throw ClientSwitchError.changedDuringSwitch }
         do { try storage.restoreRaw(previous) }
         catch {
             do { try storage.restoreRaw(current) }

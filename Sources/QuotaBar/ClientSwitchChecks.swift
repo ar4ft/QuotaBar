@@ -6,7 +6,7 @@ import QuotaCore
 // Never reads or modifies a user's CLI sign-in or macOS Keychain.
 enum ClientSwitchChecks {
     static func run() throws {
-        let home = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent("QuotaBar-switch-checks-\(UUID().uuidString)")
+        let home = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".quotabar-switch-checks-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: home) }
         let codexHome = home.appendingPathComponent(".codex")
         let codexAuth = codexHome.appendingPathComponent("auth.json")
