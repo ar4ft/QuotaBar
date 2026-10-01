@@ -125,6 +125,8 @@ Research sources: [OpenAI authentication](https://developers.openai.com/codex/au
 
 Switch transaction tests cover preserving rotated credentials, workspace identity, backup failure, partial writes, concurrent changes, rollback/recovery, absent logins, preference preservation, and private file writes/symlink rejection. No real provider credentials or macOS desktop login sessions were available here: validate both live CLI switching and the exact desktop versions you use before treating a session as switched.
 
+macOS CI additionally runs `QuotaBar.app/Contents/MacOS/QuotaBar --verify-client-switching` against a disposable home and an in-memory Keychain. This exercises both native storage adapters, file/Keychain backend selection, conflicting credentials, account preference merging, and recovery after a partial Keychain write without accessing a user's sign-in.
+
 ## Scope and provider compatibility
 
 OpenAI usage is **Codex subscription allowance**, not a universal meter for every ChatGPT feature. API billing and subscription quotas are different; an API key cannot report ChatGPT/Codex or Claude subscription allowance. The app does not calculate API spend, route requests, or run prompts. It can switch supported local Codex and Claude Code subscription sessions; native desktop account switching is separate.

@@ -10,7 +10,12 @@ struct ClientBackup: Codable, Equatable {
 }
 
 // Uses Security APIs, so secret values never appear in command-line arguments or logs.
-struct ClientSecrets {
+protocol ClientSecretStorage {
+    func read() throws -> Data?
+    func write(_ data: Data?) throws
+}
+
+struct ClientSecrets: ClientSecretStorage {
     let service: String
     let account: String
     private var query: [String: Any] {
@@ -52,21 +57,26 @@ final class NativeClientStorage: ClientSessionStorage {
     let authURL: URL
     let settingsURL: URL?
     let usesClaudeFile: Bool
-    private let claudeKeychain = ClientSecrets(service: "Claude Code-credentials", account: NSUserName())
+    private let claudeKeychain: any ClientSecretStorage
     private let initial: ClientBackup
     var backupKey: String { provider.rawValue + "|" + authURL.deletingLastPathComponent().path }
-    init(provider: Provider, codexHome: String) throws {
+    init(provider: Provider, codexHome: String,
+         home: URL = FileManager.default.homeDirectoryForCurrentUser,
+         claudeKeychain: any ClientSecretStorage = ClientSecrets(service: "Claude Code-credentials", account: NSUserName())) throws {
         self.provider = provider
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        self.claudeKeychain = claudeKeychain
         if provider == .openAI {
             let directory = URL(fileURLWithPath: NSString(string: codexHome).expandingTildeInPath, isDirectory: true)
             guard directory.path.hasPrefix("/"), directory.path != "/" else { throw CocoaError(.fileReadInvalidFileName) }
             authURL = directory.appendingPathComponent("auth.json"); settingsURL = nil; usesClaudeFile = false
             let configURL = directory.appendingPathComponent("config.toml")
-            if let config = try SecureClientFile.read(configURL),
-               let text = String(data: config, encoding: .utf8),
-               text.range(of: #"(?m)^\s*cli_auth_credentials_store\s*=\s*["'](?:keyring|keychain|auto)["']"#, options: .regularExpression) != nil {
-                throw ClientSwitchError.storageMode
+            if let config = try SecureClientFile.read(configURL), let text = String(data: config, encoding: .utf8) {
+                let pattern = #"(?m)^\s*(?:cli_auth_credentials_store|"cli_auth_credentials_store"|'cli_auth_credentials_store')\s*=\s*["']([^"']+)["']"#
+                let regex = try NSRegularExpression(pattern: pattern)
+                let range = NSRange(text.startIndex..., in: text)
+                for match in regex.matches(in: text, range: range) {
+                    if let value = Range(match.range(at: 1), in: text), text[value] != "file" { throw ClientSwitchError.storageMode }
+                }
             }
             initial = ClientBackup(authentication: try SecureClientFile.read(authURL), settings: nil)
         } else {

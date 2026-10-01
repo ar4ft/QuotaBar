@@ -53,6 +53,8 @@ jobs:
           kill "$app_process"
           wait "$app_process" || true
           unzip -tq dist/QuotaBar-macOS.zip
+      - name: Verify native account switching with synthetic sessions
+        run: dist/QuotaBar.app/Contents/MacOS/QuotaBar --verify-client-switching
       - name: Render native appearance previews
         run: |
           dist/QuotaBar.app/Contents/MacOS/QuotaBar --render-previews dist/previews

@@ -376,7 +376,8 @@ final class AccountStore: ObservableObject {
         }
         // Keep the original recovery backup intact; any valid outgoing session was saved above.
         if provider == .openAI { activeCodexAccount = "" } else { activeClaudeAccount = "" }
-        if let session = try storage.read(), let known = try matchingAccount(session) { setActive(known.id, provider: provider) }
+        let restoredStorage = try NativeClientStorage(provider: provider, codexHome: codexSwitchHome)
+        if let session = try restoredStorage.read(), let known = try matchingAccount(session) { setActive(known.id, provider: provider) }
         switchMessage = "Previous \(provider == .openAI ? "Codex" : "Claude Code") sign-in restored. Start a new client session."
     }
     private func setActive(_ id: UUID, provider: Provider) {

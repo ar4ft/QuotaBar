@@ -8,6 +8,10 @@ struct QuotaBarApp: App {
     @StateObject private var shortcut = GlobalShortcut()
     @StateObject private var updater = AppUpdater()
     init() {
+        if CommandLine.arguments.contains("--verify-client-switching") {
+            do { try ClientSwitchChecks.run(); exit(0) }
+            catch { fputs("Native client-switch checks failed: \(error.localizedDescription)\n", stderr); exit(1) }
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--render-previews") {
             let path = CommandLine.arguments.indices.contains(index + 1) ? CommandLine.arguments[index + 1] : "dist/previews"
             do { try PolishPreviews.render(to: URL(fileURLWithPath: path, isDirectory: true)); exit(0) }

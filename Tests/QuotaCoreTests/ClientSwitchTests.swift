@@ -106,19 +106,26 @@ final class ClientSwitchTests: XCTestCase {
     }
     func testSecureFilePermissionsAndSymlinkRejection() throws {
         let folder = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { if FileManager.default.fileExists(atPath: folder.path) { try? FileManager.default.removeItem(at: folder) } }
+        var stage = "writing a private credential file"
+        do {
         let path = folder.appendingPathComponent("profile/auth.json")
         let data = try codex("private").authentication
         try SecureClientFile.write(data, to: path)
+        stage = "reading the private credential file"
         XCTAssertEqual(try SecureClientFile.read(path), data)
         let attributes = try FileManager.default.attributesOfItem(atPath: path.path)
         XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
         let link = folder.appendingPathComponent("linked")
+        stage = "creating a directory symlink"
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: path.deletingLastPathComponent())
         XCTAssertThrowsError(try SecureClientFile.write(Data("different".utf8), to: link.appendingPathComponent("auth.json")))
         XCTAssertEqual(try SecureClientFile.read(path), data)
+        stage = "removing the credential file"
         try SecureClientFile.write(nil, to: path)
         XCTAssertNil(try SecureClientFile.read(path))
+        } catch { XCTFail("Failed while \(stage): \(error)") }
     }
 }
 

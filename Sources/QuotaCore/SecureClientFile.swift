@@ -7,11 +7,13 @@ import Glibc
 
 public enum SecureClientFile {
     public static func check(_ url: URL) throws {
-        var path = url.standardizedFileURL
-        while path.path != "/" {
-            if let attributes = try? FileManager.default.attributesOfItem(atPath: path.path),
+        let components = url.path.split(separator: "/").map(String.init)
+        guard url.isFileURL, !components.contains("."), !components.contains("..") else { throw CocoaError(.fileWriteNoPermission) }
+        // Inspect the original path. URL standardization can resolve links on Darwin before we inspect them.
+        for count in 1...max(1, components.count) {
+            let path = "/" + components.prefix(count).joined(separator: "/")
+            if let attributes = try? FileManager.default.attributesOfItem(atPath: path),
                attributes[.type] as? FileAttributeType == .typeSymbolicLink { throw CocoaError(.fileWriteNoPermission) }
-            path.deleteLastPathComponent()
         }
     }
     public static func read(_ url: URL) throws -> Data? {
