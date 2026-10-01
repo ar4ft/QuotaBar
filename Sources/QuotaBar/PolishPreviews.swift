@@ -39,6 +39,10 @@ struct PolishPreviews {
                     dark: true, contrast: false, size: NSSize(width: 380, height: 640), directory: directory)
         try capture(PreferencesView().environmentObject(store).environmentObject(updater).environmentObject(shortcut),
                     name: "settings-light", dark: false, contrast: false, size: NSSize(width: 620, height: 540), directory: directory)
+        try capture(ClientSwitchView(account: personal).environmentObject(store), name: "switch-codex",
+                    dark: false, contrast: false, size: NSSize(width: 660, height: 780), directory: directory)
+        try capture(ClientSwitchView(account: work).environmentObject(store), name: "switch-claude",
+                    dark: true, contrast: false, size: NSSize(width: 660, height: 780), directory: directory)
         store.presentationMode = true
         try capture(DashboardView().environmentObject(store).defaultAppStorage(defaults), name: "presentation-mode",
                     dark: false, contrast: false, size: NSSize(width: 1120, height: 760), directory: directory)

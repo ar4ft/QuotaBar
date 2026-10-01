@@ -62,6 +62,8 @@ jobs:
           test -s dist/previews/dashboard-dark.png
           test -s dist/previews/dashboard-high-contrast.png
           test -s dist/previews/dashboard-compact.png
+          test -s dist/previews/switch-codex.png
+          test -s dist/previews/switch-claude.png
       - name: Publish UI previews
         uses: actions/upload-artifact@v4
         with:

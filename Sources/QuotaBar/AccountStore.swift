@@ -83,6 +83,9 @@ final class AccountStore: ObservableObject {
                 _showRemaining = AppStorage(wrappedValue: true, "showRemaining", store: previewDefaults)
                 _accountSortRaw = AppStorage(wrappedValue: AccountSort.added.rawValue, "accountSort", store: previewDefaults)
                 _pinnedAccountID = AppStorage(wrappedValue: "", "pinnedAccountID", store: previewDefaults)
+                _codexSwitchHome = AppStorage(wrappedValue: "/Users/demo/.codex", "codexSwitchHome", store: previewDefaults)
+                _activeCodexAccount = AppStorage(wrappedValue: "", "activeCodexAccount", store: previewDefaults)
+                _activeClaudeAccount = AppStorage(wrappedValue: "", "activeClaudeAccount", store: previewDefaults)
             }
             return
         }
