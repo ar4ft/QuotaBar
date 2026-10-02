@@ -5,7 +5,7 @@ on:
       tag:
         description: Release tag matching the app version
         required: true
-        default: v0.7.0
+        default: v0.8.0
         type: string
       publish:
         description: Publish signed installers and update feed as a GitHub Release
@@ -36,6 +36,8 @@ jobs:
       NOTARY_KEYCHAIN_PROFILE: QuotaBar-notary
     steps:
       - uses: actions/checkout@v4
+      - name: Select Swift 6.2 toolchain
+        run: sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
       - name: Validate release configuration
         run: |
           python3 - <<'PY'

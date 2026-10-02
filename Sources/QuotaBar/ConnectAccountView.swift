@@ -18,14 +18,15 @@ struct ConnectAccountView: View {
     @State private var importing = false
     @State private var saving = false
     @State private var error: String?
-    @StateObject private var login = CodexLogin()
+    @State private var login = CodexLogin()
     init(request: ConnectionRequest) {
         self.request = request
         _provider = State(initialValue: request.account?.provider ?? .openAI)
         _name = State(initialValue: request.account?.name ?? "")
     }
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        ScrollView {
+        VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(request.account == nil ? "Add an account" : "Reconnect account").font(.title2.bold()).accessibilityAddTraits(.isHeader)
@@ -97,7 +98,8 @@ struct ConnectAccountView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(24).frame(width: 560)
+        .padding(AppStyle.pagePadding)
+        }.frame(minWidth: 520, idealWidth: 600, minHeight: 480, idealHeight: 640)
         .fileImporter(isPresented: $importing, allowedContentTypes: [.json, .data]) { result in
             do {
                 let url = try result.get()

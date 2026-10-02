@@ -3,10 +3,11 @@ import Foundation
 import QuotaCore
 
 @MainActor
-final class CodexLogin: ObservableObject {
-    @Published var output = ""
-    @Published var running = false
-    @Published var error: String?
+@Observable
+final class CodexLogin {
+    var output = ""
+    var running = false
+    var error: String?
     private var process: Process?
     private var workingFolder: URL?
     private var timeoutTask: Task<Void, Never>?

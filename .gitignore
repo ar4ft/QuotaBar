@@ -5,3 +5,6 @@ dist/
 *.xcuserstate
 
 __pycache__/
+
+# Locally installed agent skills; versions recorded in skills-lock.json.
+.agents/

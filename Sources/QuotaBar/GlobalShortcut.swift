@@ -1,12 +1,14 @@
 #if os(macOS)
 import SwiftUI
+import Observation
 import AppKit
 import Carbon
 import QuotaCore
 
 @MainActor
-final class GlobalShortcut: ObservableObject {
-    @Published private(set) var error: String?
+@Observable
+final class GlobalShortcut {
+    private(set) var error: String?
     private var hotKey: EventHotKeyRef?
     private var handler: EventHandlerRef?
     private var action: (() -> Void)?
@@ -52,7 +54,7 @@ final class GlobalShortcut: ObservableObject {
                                          GetApplicationEventTarget(), 0, &hotKey)
         if status != noErr { error = "This shortcut is unavailable or used by another app. Choose another combination (\(status))." }
     }
-    deinit {
+    isolated deinit {
         if let hotKey { UnregisterEventHotKey(hotKey) }
         if let handler { RemoveEventHandler(handler) }
     }
@@ -60,7 +62,7 @@ final class GlobalShortcut: ObservableObject {
 
 struct ShortcutBridge: View {
     @EnvironmentObject private var store: AccountStore
-    @EnvironmentObject private var shortcut: GlobalShortcut
+    @Environment(GlobalShortcut.self) private var shortcut
     @Environment(\.openWindow) private var openWindow
     var body: some View {
         Color.clear.frame(width: 0, height: 0)

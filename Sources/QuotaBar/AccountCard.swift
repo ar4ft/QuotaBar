@@ -36,6 +36,7 @@ struct AccountCard: View {
                     .background(account.provider.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(account.name).font(.headline).lineLimit(2).textSelection(.enabled)
+                    Text(account.provider.title).font(.caption).foregroundStyle(account.provider.tint)
                     Text(account.detail ?? account.provider.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer()
@@ -47,7 +48,7 @@ struct AccountCard: View {
                     Button("Rename…", action: rename)
                     Button("History & export…", action: history)
                     Divider(); Button("Remove account", role: .destructive, action: remove).disabled(refreshing)
-                } label: { Image(systemName: "ellipsis").frame(width: 20, height: 20) }
+                } label: { Label("Account actions", systemImage: "ellipsis").labelStyle(.iconOnly) }
                     .menuStyle(.borderlessButton).fixedSize()
                     .accessibilityLabel("Actions for " + account.name).help("Account actions")
             }
@@ -86,54 +87,18 @@ struct AccountCard: View {
                     }
                 } else { Text("Awaiting first reading").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
-                Button("History…", action: history).controlSize(.small).accessibilityLabel("Usage history for " + account.name)
                 if let plan = account.snapshot?.plan { Text(plan.capitalized).font(.caption.weight(.medium)).foregroundStyle(.secondary) }
             }
-        }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
+            HStack {
+                Button("Use account", systemImage: "arrow.left.arrow.right", action: useAccount)
+                    .disabled(refreshing).accessibilityLabel("Use \(account.name) in the CLI")
+                Spacer()
+                Button("History", systemImage: "chart.xyaxis.line", action: history)
+                    .accessibilityLabel("Usage history for " + account.name)
+            }.controlSize(.small)
+        }.padding(AppStyle.cardPadding).frame(maxWidth: .infinity, alignment: .leading)
             .modifier(AccountSurface())
             .accessibilityElement(children: .contain)
-    }
-}
-
-struct CreditSummary: View {
-    let snapshot: UsageSnapshot
-    let provider: Provider
-    var body: some View {
-        if provider == .openAI {
-            VStack(alignment: .leading, spacing: 4) {
-                Label("Credits: " + (snapshot.credits?.display ?? "Not reported"), systemImage: "creditcard")
-                Text(snapshot.availableResetCredits.map { "Reset credits available: \($0)" } ?? "Reset credits: Not reported")
-            }.font(.caption).foregroundStyle(.secondary)
-        }
-    }
-}
-
-struct UsageMeter: View {
-    let window: UsageWindow
-    let tint: Color
-    let showRemaining: Bool
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 15)) { context in
-            let awaitingReset = window.resetsAt.map { $0 <= context.date } ?? false
-            VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(window.title).font(.callout.weight(.medium))
-                Spacer()
-                Text(awaitingReset ? "—" : "\(Int((showRemaining ? window.remainingPercent : window.usedPercent).rounded()))%")
-                    .font(.system(.callout, design: .rounded).weight(.semibold)).monospacedDigit()
-                Text(showRemaining ? "left" : "used").font(.caption).foregroundStyle(.secondary)
-            }
-            ProgressView(value: awaitingReset ? 0 : showRemaining ? window.remainingPercent : window.usedPercent, total: 100)
-                .progressViewStyle(.linear).tint(window.usedPercent >= 90 ? .orange : tint)
-                .accessibilityHidden(true)
-                Text(window.resetDescription(now: context.date)).font(.caption).foregroundStyle(.secondary)
-                    .help(window.resetsAt.map { $0.formatted(date: .complete, time: .shortened) } ?? "Provider did not report a reset")
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(window.title)
-            .accessibilityValue(awaitingReset ? "Reset reached; refresh to confirm allowance" :
-                "\(Int(window.usedPercent.rounded())) percent used, \(window.resetDescription(now: context.date))")
-        }
     }
 }
 #endif

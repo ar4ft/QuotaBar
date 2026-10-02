@@ -2,12 +2,6 @@
 import SwiftUI
 import QuotaCore
 
-private enum AccountFilter: String, CaseIterable, Identifiable {
-    case all, openAI, claude
-    var id: String { rawValue }
-    var title: String { self == .all ? "All accounts" : self == .openAI ? "OpenAI" : "Claude" }
-    var symbol: String { self == .all ? "square.grid.2x2" : self == .openAI ? "sparkle" : "sun.max" }
-}
 struct DashboardView: View {
     @EnvironmentObject private var store: AccountStore
     @State private var filter: AccountFilter? = .all
@@ -21,7 +15,7 @@ struct DashboardView: View {
     private var filtered: [Account] {
         store.orderedAccounts.filter {
             (filter == nil || filter == .all || $0.provider.rawValue == filter?.rawValue) &&
-            (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || ($0.detail?.localizedCaseInsensitiveContains(search) ?? false)) &&
+            (search.isEmpty || $0.name.localizedStandardContains(search) || ($0.detail?.localizedStandardContains(search) ?? false)) &&
             (!availableOnly || store.availability($0).status.isAvailable)
         }
     }
@@ -47,35 +41,34 @@ struct DashboardView: View {
                 }
         } detail: {
             ScrollView {
-                VStack(alignment: .leading, spacing: 26) {
+                let accounts = filtered
+                VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
                     Button {
                         store.showConnectionHealth = true
                     } label: {
                         Label(store.presentationMode ? "Connection health" : "Connection health · \(store.attentionCount) need attention",
                               systemImage: "network")
                     }.buttonStyle(.plain).foregroundStyle(.secondary)
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 12) { metrics }
-                        VStack(spacing: 12) { metrics }
-                    }
+                    DashboardMetrics(accounts: accounts, presentationMode: store.presentationMode,
+                                     errorIDs: Set(store.errors.keys))
                     ViewThatFits(in: .horizontal) {
                         HStack { accountControls }
                         VStack(alignment: .leading, spacing: 12) { accountControls }
                     }
                     if store.accounts.isEmpty { emptyState }
-                    else if filtered.isEmpty {
+                    else if accounts.isEmpty {
                         ContentUnavailableView("No matching accounts", systemImage: "line.3.horizontal.decrease.circle",
                                                description: Text("Try another search or turn off the availability filter."))
                     } else if listLayout {
-                        LazyVStack(spacing: 12) { ForEach(filtered) { account in card(account) } }
+                        LazyVStack(spacing: 12) { ForEach(accounts) { account in card(account) } }
                     } else {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16, alignment: .top)], alignment: .leading, spacing: 16) {
-                            ForEach(filtered) { account in card(account) }
+                            ForEach(accounts) { account in card(account) }
                         }
                     }
                     Text("OpenAI readings reflect Codex allowance. Limits and reset times come from each provider.")
                         .font(.caption).foregroundStyle(.secondary)
-                }.padding(24).frame(maxWidth: 1350)
+                }.padding(AppStyle.pagePadding).frame(maxWidth: 1350)
             }.background(Color(nsColor: .windowBackgroundColor))
             .navigationTitle(filter?.title ?? "All accounts")
             .navigationSubtitle("\(filtered.count) connected")
@@ -116,11 +109,6 @@ struct DashboardView: View {
             Button("OK") { store.globalError = nil }
         } message: { Text(store.globalError ?? "") }
     }
-    @ViewBuilder private var metrics: some View {
-        MetricTile(title: "Connected", value: "\(filtered.count)", detail: "subscription accounts", symbol: "person.2")
-        MetricTile(title: "Available", value: store.presentationMode ? "—" : "\(filtered.filter { store.availability($0).status.isAvailable }.count)", detail: "accounts with allowance left", symbol: "checkmark.circle")
-        MetricTile(title: "Next reset", value: store.presentationMode ? "—" : nextReset, detail: "earliest upcoming window", symbol: "clock.arrow.circlepath")
-    }
     @ViewBuilder private var accountControls: some View {
         Text("Accounts").font(.headline).accessibilityAddTraits(.isHeader)
         Spacer(minLength: 12)
@@ -152,33 +140,6 @@ struct DashboardView: View {
     }
     private func count(_ item: AccountFilter) -> Int {
         store.accounts.filter { item == .all || $0.provider.rawValue == item.rawValue }.count
-    }
-    private var nextReset: String {
-        guard let date = filtered.flatMap({ $0.snapshot?.windows ?? [] }).compactMap(\.resetsAt).filter({ $0 > Date() }).min() else { return "—" }
-        let minutes = max(1, Int(ceil(date.timeIntervalSinceNow / 60)))
-        if minutes >= 1440 { return "\(minutes / 1440)d \((minutes % 1440) / 60)h" }
-        if minutes >= 60 { return "\(minutes / 60)h \(minutes % 60)m" }
-        return "\(minutes)m"
-    }
-}
-
-private struct MetricTile: View {
-    let title: String
-    let value: String
-    let detail: String
-    let symbol: String
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(title).font(.callout).foregroundStyle(.secondary)
-                Spacer(); Image(systemName: symbol).foregroundStyle(.secondary).accessibilityHidden(true)
-            }
-            Text(value).font(.title.weight(.semibold)).monospacedDigit()
-            Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2, reservesSpace: true)
-        }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
-            .modifier(AccountSurface())
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(title).accessibilityValue(value + ", " + detail)
     }
 }
 #endif

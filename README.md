@@ -27,6 +27,8 @@ cd QuotaBar
 open dist/QuotaBar.app
 ```
 
+Use Xcode 26.2 or newer (Swift 6.2+). The app still supports macOS 14 and newer.
+
 You can also open `Package.swift` in Xcode and run the `QuotaBar` executable scheme. The script defaults to `--unsigned` and builds a universal development `.app` bundle (Apple Silicon + Intel) without certificate/bundle signing, creates `dist/QuotaBar-macOS.zip` preserving executable permissions, and builds `dist/QuotaBar-macOS.dmg` with an Applications shortcut. Push/PR builds and the normal development action use `--unsigned`, skip all packaging-time signing and notarization, and have no update feed configured. The compiler still emits the minimal ad-hoc executable signature required by Apple Silicon; the embedded Sparkle framework retains its upstream signature. The optional signed-release workflow uses your Developer ID certificate and Apple notarization credentials. Development builds may prompt for Keychain access again when their executable changes.
 
 To test:
@@ -210,7 +212,7 @@ Create repository or `release` environment secrets in GitHub Settings → Secret
 
 Do not commit private keys or passwords. Keep a backup of the Sparkle key so existing installations can trust future releases.
 
-Run **Actions → Signed macOS release → Run workflow**, with a tag matching the bundle version (currently `v0.7.0`). The default **publish=false** creates a `QuotaBar-macOS-signed` artifact with notarized ZIP/DMG and signed `appcast.xml`. Inspect that artifact first. Set **publish=true** for a subsequent run when ready to publish a GitHub Release; it creates the tag at the built commit, uploads the three files, and marks that release latest. Publishing uses the GitHub workflow token. No release is published by the normal push/PR workflow.
+Run **Actions → Signed macOS release → Run workflow**, with a tag matching the bundle version (currently `v0.8.0`). The default **publish=false** creates a `QuotaBar-macOS-signed` artifact with notarized ZIP/DMG and signed `appcast.xml`. Inspect that artifact first. Set **publish=true** for a subsequent run when ready to publish a GitHub Release; it creates the tag at the built commit, uploads the three files, and marks that release latest. Publishing uses the GitHub workflow token. No release is published by the normal push/PR workflow.
 
 The app uses `https://github.com/ar4ft/QuotaBar/releases/latest/download/appcast.xml`. A release must have both that feed and its signed ZIP available. `CFBundleVersion` must increase for every update. Publishing a non-update-enabled release as latest would interrupt that feed; use this workflow for public releases. The script validates matching public/private keys and the release tag, signs nested framework helpers, notarizes/staples the app and DMG, and deletes the temporary signing keychain and certificate afterward. Notarization and an end-to-end older-version update still need validation with your credentials.
 
@@ -236,3 +238,14 @@ The interface now follows Apple's [macOS design](https://developer.apple.com/des
 CI produces a separate **QuotaBar-UI-Previews** artifact containing native light/dark, high-contrast, compact-width, menu, Settings, Codex/Claude switching, and presentation-mode snapshots, plus the 1024px icon. Preview mode uses synthetic accounts with example.invalid addresses, private temporary preferences, and no credential reads, provider polling, or account-file writes. Run `QuotaBar.app/Contents/MacOS/QuotaBar --render-previews <directory>` on a Mac to reproduce them.
 
 These changes are informed by the HIG; they are not an Apple certification or a completed accessibility audit. Manual VoiceOver, keyboard navigation, Increase Contrast/Reduce Transparency, and real-device layout checks remain part of release testing. Push/PR builds continue to skip certificate signing; only the manually dispatched signed-release workflow can sign/notarize.
+
+
+## SwiftUI Pro review (0.8.0)
+
+Reviewed with Paul Hudson’s [swiftui-pro](https://github.com/twostraws/swiftui-agent-skill) skill. Install locally with `npx skills add https://github.com/twostraws/swiftui-agent-skill --skill swiftui-pro --yes`; its source hash is recorded in `skills-lock.json`. Agent-tooling files are excluded from the app repository.
+
+The app now builds with Swift 6.2 in Swift 6 language mode. CI selects Xcode 26.2 for both unsigned development and manual signed releases. macOS 14 remains supported: Settings uses the modern Tab API on macOS 15+, with a compatibility branch for macOS 14. Login, hot-key, and login-item helpers use Observation. The account store retains its existing AppStorage integration, and Sparkle retains its Combine/KVO bridge; neither is wrapped in an Observable macro that would break settings updates.
+
+Dashboard summaries now refresh countdowns and availability with TimelineView. Dedicated settings panes and meter/summary components reduce large view bodies, with shared spacing/surface constants. Native status colors keep their text/symbol meanings, provider labels are explicit, and account switching is directly visible on cards. Login and switching sheets scroll and resize instead of requiring one fixed height. Very small remaining allowances and nearly exhausted windows are displayed/spoken accurately rather than rounded to a misleading 0% or 100%.
+
+See [the review and applied changes](docs/swiftui-pro-review.md). Native previews and synthetic switching checks remain in CI. Certificate signing still happens only in the manually dispatched signed-release workflow. Live provider sessions and manual VoiceOver/navigation checks remain outside synthetic CI coverage.

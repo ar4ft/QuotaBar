@@ -10,6 +10,8 @@ jobs:
     runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
+      - name: Select Swift 6.2 toolchain
+        run: sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
       - name: Swift version
         run: xcrun swift --version
       - name: Core tests and app compilation

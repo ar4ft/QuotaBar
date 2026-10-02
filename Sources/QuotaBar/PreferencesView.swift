@@ -1,168 +1,27 @@
 #if os(macOS)
 import SwiftUI
-import AppKit
-import QuotaCore
 
 struct PreferencesView: View {
-    @EnvironmentObject private var store: AccountStore
-    @EnvironmentObject private var shortcut: GlobalShortcut
-    @EnvironmentObject private var updater: AppUpdater
-    @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var login = LaunchAtLogin()
-    @State private var alertAccountID = ""
-    private var alertAccount: Account? { store.accounts.first { $0.id.uuidString == alertAccountID } }
+    @State private var selection: SettingsTab = .general
     var body: some View {
-        TabView {
-            Form {
-            Section("General") {
-                Picker("Refresh accounts every", selection: $store.refreshMinutes) {
-                    Text("1 minute").tag(1); Text("5 minutes").tag(5); Text("15 minutes").tag(15); Text("30 minutes").tag(30)
+        Group {
+            if #available(macOS 15, *) {
+                TabView(selection: $selection) {
+                    Tab("General", systemImage: "gearshape", value: .general) { GeneralSettings() }
+                    Tab("Menu Bar", systemImage: "menubar.rectangle", value: .menuBar) { MenuBarSettings() }
+                    Tab("Alerts", systemImage: "bell", value: .alerts) { AlertSettings() }
+                    Tab("Updates", systemImage: "arrow.triangle.2.circlepath", value: .updates) { UpdateSettings() }
                 }
-                Toggle("Presentation mode", isOn: $store.presentationMode)
-                Text("Hides account identities and balances and silences usage alerts. Existing QuotaBar notifications are cleared when enabled.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Toggle("Show remaining allowance in dashboard", isOn: $store.showRemaining)
-                Toggle("Launch QuotaBar at login", isOn: Binding(get: { login.enabled }, set: { value in
-                    Task { await login.setEnabled(value) }
-                })).disabled(login.updating)
-                if login.requiresApproval {
-                    Text("Approve QuotaBar in Login Items to finish enabling launch at login.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Button("Open Login Items") { login.openLoginItems() }
-                }
-                if let error = login.error { Text(error).font(.caption).foregroundStyle(.orange) }
-                Text("Move QuotaBar.app to Applications before enabling launch at login.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section("Keyboard shortcut") {
-                Toggle("Open dashboard from any app", isOn: $store.shortcutEnabled)
-                HStack {
-                    Picker("Modifiers", selection: $store.shortcutModifiersRaw) {
-                        ForEach(ShortcutModifiers.allCases) { Text($0.title).tag($0.rawValue) }
-                    }
-                    Picker("Key", selection: $store.shortcutLetter) {
-                        ForEach(Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map(String.init), id: \.self) { Text($0).tag($0) }
-                    }.frame(width: 100)
-                }.disabled(!store.shortcutEnabled)
-                if let error = shortcut.error { Text(error).font(.caption).foregroundStyle(.orange) }
-                Text("Default: Control + Option + Q. No Accessibility permission is needed.").font(.caption).foregroundStyle(.secondary)
-            }
-            }.formStyle(.grouped).tabItem { Label("General", systemImage: "gearshape") }
-            Form {
-            Section("Menu bar") {
-                Picker("Display", selection: $store.menuBarDisplayRaw) {
-                    ForEach(MenuBarDisplay.allCases) { Text($0.title).tag($0.rawValue) }
-                }
-                Picker("Pinned account", selection: Binding(get: { store.pinnedAccountID }, set: { store.pinAccount($0) })) {
-                    Text("No pinned account").tag("")
-                    ForEach(store.accounts) { Text(store.presentationMode ? $0.provider.title + " account" : "\($0.name) · \($0.provider.title)").tag($0.id.uuidString) }
-                }
-                if let account = store.pinnedAccount {
-                    Picker("Allowance window", selection: $store.pinnedWindowID) {
-                        Text("Most constrained window").tag("")
-                        ForEach(account.snapshot?.windows ?? []) { Text($0.title).tag($0.id) }
-                        if !store.pinnedWindowID.isEmpty, !(account.snapshot?.windows.contains { $0.id == store.pinnedWindowID } ?? false) {
-                            Text("Selected window unavailable").tag(store.pinnedWindowID)
-                        }
-                    }
-                }
-                Text("Shows your selected reading beside the menu bar icon. Credits are reported for eligible OpenAI accounts; missing balances remain unknown. A ~ marks a stale reading; — means no reading or a reset awaiting confirmation.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            }.formStyle(.grouped).tabItem { Label("Menu Bar", systemImage: "menubar.rectangle") }
-            Form {
-            Section("Usage alerts") {
-                Toggle("Enable usage notifications", isOn: Binding(get: { store.notificationsEnabled }, set: { value in
-                    Task { await store.setNotificationsEnabled(value) }
-                })).disabled(store.requestingNotificationPermission)
-                if store.requestingNotificationPermission { ProgressView().controlSize(.small) }
-                if store.notificationsEnabled && !store.notificationsAuthorized {
-                    Text("Notifications are blocked by macOS. Allow QuotaBar in System Settings.")
-                        .font(.caption).foregroundStyle(.orange)
-                }
-                if let error = store.notificationError { Text(error).font(.caption).foregroundStyle(.orange) }
-                Button("Open Notification Settings") {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-                if !store.accounts.isEmpty && !store.presentationMode {
-                    Picker("Configure account", selection: $alertAccountID) {
-                        ForEach(store.accounts) { Text(store.presentationMode ? $0.provider.title + " account" : "\($0.name) · \($0.provider.title)").tag($0.id.uuidString) }
-                    }
-                    if let account = alertAccount {
-                        Toggle("Alerts for this account", isOn: preference(account, \.enabled))
-                        Group {
-                            Toggle("Use a custom consumption threshold", isOn: Binding(get: {
-                                account.effectiveAlertPreferences.customThresholds != nil
-                            }, set: { enabled in
-                                store.updateAlertPreferences(account.id) { $0.customThresholds = enabled ? [90] : nil }
-                            }))
-                            if let threshold = account.effectiveAlertPreferences.customThresholds?.first {
-                                Stepper("Warn at \(threshold)% consumed", value: Binding(get: { threshold }, set: { value in
-                                    store.updateAlertPreferences(account.id) { $0.customThresholds = [value] }
-                                }), in: 1...99)
-                            } else {
-                                Toggle("Warn at 80% consumed", isOn: preference(account, \.warnAt80))
-                                Toggle("Warn at 95% consumed", isOn: preference(account, \.warnAt95))
-                            }
-                            if account.provider == .openAI {
-                                Toggle("Warn when credits are low", isOn: Binding(get: {
-                                    account.effectiveAlertPreferences.lowCreditThreshold != nil
-                                }, set: { enabled in
-                                    store.updateAlertPreferences(account.id) { $0.lowCreditThreshold = enabled ? 100 : nil }
-                                }))
-                                if let threshold = account.effectiveAlertPreferences.lowCreditThreshold {
-                                    Stepper("Low-credit threshold: \(Int(threshold))", value: Binding(get: { threshold }, set: { value in
-                                        store.updateAlertPreferences(account.id) { $0.lowCreditThreshold = value }
-                                    }), in: 0...100_000, step: 10)
-                                }
-                                Text("Credit alerts require a numeric provider balance; unknown or unlimited balances never trigger them.").font(.caption).foregroundStyle(.secondary)
-                            }
-                            Toggle("Notify when allowance is available again", isOn: preference(account, \.notifyWhenAvailable))
-                        }.disabled(!account.effectiveAlertPreferences.enabled)
-                    }
-                }
-                Text("One threshold alert per window and reset cycle. Recovery alerts require a fresh provider reading, after exhaustion or a confirmed reset from at least 80% usage. macOS Focus settings can silence notifications.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            }.formStyle(.grouped).tabItem { Label("Alerts", systemImage: "bell") }
-            Form {
-            Section("Updates") {
-                if updater.configured {
-                    Toggle("Automatically check for updates", isOn: Binding(get: { updater.automaticChecks }, set: updater.setAutomaticChecks))
-                    Toggle("Automatically download updates", isOn: Binding(get: { updater.automaticDownloads }, set: updater.setAutomaticDownloads))
-                        .disabled(!updater.automaticChecks)
-                    Button("Check for Updates…", action: updater.check).disabled(!updater.canCheck)
-                    Text("Updates use a signed feed and signed downloads. Installation is handled by Sparkle.").font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Text("Automatic updates are available in release builds. You can download development builds from GitHub.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Link("Open QuotaBar downloads", destination: URL(string: "https://github.com/ar4ft/QuotaBar/actions")!)
+            } else {
+                TabView(selection: $selection) {
+                    GeneralSettings().tabItem { Label("General", systemImage: "gearshape") }.tag(SettingsTab.general)
+                    MenuBarSettings().tabItem { Label("Menu Bar", systemImage: "menubar.rectangle") }.tag(SettingsTab.menuBar)
+                    AlertSettings().tabItem { Label("Alerts", systemImage: "bell") }.tag(SettingsTab.alerts)
+                    UpdateSettings().tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }.tag(SettingsTab.updates)
                 }
             }
-            }.formStyle(.grouped).tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }
-        }.padding(12).frame(width: 620, height: 540)
-            .task {
-                login.refresh(); await store.refreshNotificationAuthorization()
-                selectAlertAccount()
-            }
-            .onChange(of: store.accounts.map(\.id)) { _, _ in selectAlertAccount() }
-            .onChange(of: scenePhase) { _, phase in
-                if phase == .active { login.refresh(); Task { await store.refreshNotificationAuthorization() } }
-            }
-    }
-    private func selectAlertAccount() {
-        if !store.accounts.contains(where: { $0.id.uuidString == alertAccountID }) {
-            alertAccountID = store.accounts.first?.id.uuidString ?? ""
-        }
-    }
-    private func preference(_ account: Account, _ keyPath: WritableKeyPath<AlertPreferences, Bool>) -> Binding<Bool> {
-        Binding(get: {
-            store.accounts.first(where: { $0.id == account.id })?.effectiveAlertPreferences[keyPath: keyPath] ?? false
-        }, set: { value in
-            store.updateAlertPreferences(account.id) { $0[keyPath: keyPath] = value }
-        })
+        }.padding(AppStyle.rowSpacing)
+            .frame(minWidth: 560, idealWidth: 640, minHeight: 500, idealHeight: 580)
     }
 }
 #endif

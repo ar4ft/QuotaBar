@@ -1,15 +1,16 @@
 #if os(macOS)
 import SwiftUI
+import Observation
 import ServiceManagement
 
 @MainActor
-final class LaunchAtLogin: ObservableObject {
-    @Published private(set) var enabled = false
-    @Published private(set) var requiresApproval = false
-    @Published private(set) var updating = false
-    @Published var error: String?
+@Observable
+final class LaunchAtLogin {
+    private(set) var enabled = false
+    private(set) var requiresApproval = false
+    private(set) var updating = false
+    var error: String?
     var bundled: Bool { Bundle.main.bundleURL.pathExtension == "app" }
-    init() { refresh() }
     func refresh() {
         guard bundled else { enabled = false; requiresApproval = false; return }
         let status = SMAppService.mainApp.status

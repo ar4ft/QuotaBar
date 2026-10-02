@@ -11,7 +11,8 @@ struct ClientSwitchView: View {
     @State private var finished = false
     private var client: String { account.provider == .openAI ? "Codex" : "Claude Code" }
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        ScrollView {
+        VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
             HStack {
                 Text("Use \(account.name)").font(.title2.bold()).accessibilityAddTraits(.isHeader)
                 Spacer()
@@ -31,14 +32,9 @@ struct ClientSwitchView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             HStack {
-                Button("Use this account") {
-                    do { try store.switchClient(to: account); error = nil; finished = true }
-                    catch { self.error = error.localizedDescription }
-                }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction).disabled(finished)
-                Button("Restore previous sign-in") {
-                    do { try store.restorePreviousClient(account.provider); error = nil; finished = false }
-                    catch { self.error = error.localizedDescription }
-                }
+                Button("Use this account", action: switchAccount)
+                    .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction).disabled(finished)
+                Button("Restore previous sign-in", action: restoreAccount)
             }
             if let error { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true) }
             if let message = store.switchMessage { Label(message, systemImage: "checkmark.circle").fixedSize(horizontal: false, vertical: true) }
@@ -51,8 +47,17 @@ struct ClientSwitchView: View {
                 Link("Authentication guide", destination: URL(string: account.provider == .openAI ?
                     "https://developers.openai.com/codex/auth/" : "https://code.claude.com/docs/en/authentication")!)
             }
-        }.padding(24).frame(width: 610)
+        }.padding(AppStyle.pagePadding)
+        }.frame(minWidth: 540, idealWidth: 640, minHeight: 440, idealHeight: 600)
         .onChange(of: store.presentationMode) { _, hidden in if hidden { dismiss() } }
+    }
+    private func switchAccount() {
+        do { try store.switchClient(to: account); error = nil; finished = true }
+        catch { self.error = error.localizedDescription }
+    }
+    private func restoreAccount() {
+        do { try store.restorePreviousClient(account.provider); error = nil; finished = false }
+        catch { self.error = error.localizedDescription }
     }
     private func openDesktop() {
         let names = account.provider == .openAI ? ["Codex", "ChatGPT"] : ["Claude"]

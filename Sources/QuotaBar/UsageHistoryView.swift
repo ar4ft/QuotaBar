@@ -37,7 +37,7 @@ struct UsageHistoryView: View {
                 VStack(spacing: 20) {
                     ContentUnavailableView("History hidden", systemImage: "eye.slash", description: Text("Turn off presentation mode to view or export balances."))
                     Button("Done") { dismiss() }
-                }.frame(width: 760, height: 740)
+                }.frame(minWidth: 560, idealWidth: 760, minHeight: 440, idealHeight: 660)
             } else { content }
         }
     }

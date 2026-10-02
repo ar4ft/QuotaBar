@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 var appDependencies: [Target.Dependency] = ["QuotaCore"]
@@ -22,5 +22,5 @@ let package = Package(
         .executableTarget(name: "QuotaBar", dependencies: appDependencies, linkerSettings: appLinkerSettings),
         .testTarget(name: "QuotaCoreTests", dependencies: ["QuotaCore"])
     ] + binaryTargets,
-    swiftLanguageModes: [.v5]
+    swiftLanguageModes: [.v6]
 )

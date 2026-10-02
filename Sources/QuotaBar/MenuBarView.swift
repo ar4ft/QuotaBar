@@ -26,7 +26,7 @@ struct MenuBarView: View {
                 }.padding(30)
             } else {
                 ScrollView {
-                    VStack(spacing: 0) {
+                    LazyVStack(spacing: 0) {
                         ForEach(store.orderedAccounts) { account in
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {

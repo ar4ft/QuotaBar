@@ -5,7 +5,7 @@ import AppKit
 @main
 struct QuotaBarApp: App {
     @StateObject private var store = AccountStore()
-    @StateObject private var shortcut = GlobalShortcut()
+    @State private var shortcut = GlobalShortcut()
     @StateObject private var updater = AppUpdater()
     init() {
         if CommandLine.arguments.contains("--verify-client-switching") {
@@ -37,9 +37,9 @@ struct QuotaBarApp: App {
             MenuBarView().environmentObject(store).environmentObject(updater).task { store.start(); updater.start() }
         } label: {
             MenuBarLabel().environmentObject(store).task { store.start(); updater.start() }
-                .background(ShortcutBridge().environmentObject(store).environmentObject(shortcut))
+                .background(ShortcutBridge().environmentObject(store).environment(shortcut))
         }.menuBarExtraStyle(.window)
-        Settings { PreferencesView().environmentObject(store).environmentObject(shortcut).environmentObject(updater) }
+        Settings { PreferencesView().environmentObject(store).environment(shortcut).environmentObject(updater) }
             .windowResizability(.contentSize)
     }
 }

@@ -24,13 +24,18 @@ struct ClaudeSignIn: NSViewRepresentable {
         coordinator.cookieStore?.remove(coordinator)
         coordinator.closed = true
     }
+    @MainActor
     final class Coordinator: NSObject, WKHTTPCookieStoreObserver, WKNavigationDelegate, WKUIDelegate {
         let completion: (Credential) -> Void
         var cookieStore: WKHTTPCookieStore?
         var finished = false
         var closed = false
         init(completion: @escaping (Credential) -> Void) { self.completion = completion }
-        func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
+        nonisolated func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
+            Task { @MainActor [weak self] in self?.readCookies() }
+        }
+        private func readCookies() {
+            guard let cookieStore else { return }
             cookieStore.getAllCookies { [weak self] cookies in
                 guard let self, !self.finished, !self.closed,
                       let cookie = cookies.first(where: {
