@@ -8,8 +8,8 @@ struct UpdateSettings: View {
         Form {
             Section("Updates") {
                 if updater.configured {
-                    Toggle("Automatically check for updates", isOn: Binding(get: { updater.automaticChecks }, set: updater.setAutomaticChecks))
-                    Toggle("Automatically download updates", isOn: Binding(get: { updater.automaticDownloads }, set: updater.setAutomaticDownloads))
+                    Toggle("Automatically check for updates", isOn: Binding(get: { updater.automaticChecks }, set: { updater.setAutomaticChecks($0) }))
+                    Toggle("Automatically download updates", isOn: Binding(get: { updater.automaticDownloads }, set: { updater.setAutomaticDownloads($0) }))
                         .disabled(!updater.automaticChecks)
                     Button("Check for Updates…", action: updater.check).disabled(!updater.canCheck)
                     Text("Updates use a signed feed and signed downloads. Installation is handled by Sparkle.").font(.caption).foregroundStyle(.secondary)

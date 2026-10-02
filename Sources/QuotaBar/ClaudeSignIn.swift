@@ -53,7 +53,7 @@ struct ClaudeSignIn: NSViewRepresentable {
             return nil
         }
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
-                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+                     decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
             guard let scheme = navigationAction.request.url?.scheme,
                   ["https", "http", "about"].contains(scheme) else { decisionHandler(.cancel); return }
             decisionHandler(.allow)

@@ -2,7 +2,7 @@
 
 Review source: installed `.agents/skills/swiftui-pro/SKILL.md`, Paul Hudson’s swiftui-pro 1.1. Source hash: `skills-lock.json`. Findings below were applied, not just proposed.
 
-## Package.swift and macOS workflows
+## Package.swift:1 and .github/workflows/macos.yml:13
 
 **Use Swift 6.2+ and modern concurrency checks.**
 
@@ -10,7 +10,7 @@ Before: `swift-tools-version: 6.0`, `swiftLanguageModes: [.v5]`.
 
 After: `swift-tools-version: 6.2`, `swiftLanguageModes: [.v6]`; CI explicitly selects Xcode 26.2. Deployment remains macOS 14 because this is an existing Mac application, not a new iOS application. Unsigned automation and manual-only certificate signing remain separate.
 
-## PreferencesView.swift
+## PreferencesView.swift:6
 
 **Extract large view bodies; use typed selection and modern Tab APIs.**
 
@@ -18,7 +18,7 @@ Before: four settings forms in a single body, `.tabItem()` everywhere, fixed `62
 
 After: `GeneralSettings`, `MenuBarSettings`, `AlertSettings`, and `UpdateSettings` in separate files; `SettingsTab` enum selection; `Tab` on macOS 15+ and a macOS 14 compatibility branch; flexible minimum/ideal dimensions.
 
-## CodexLogin.swift, LaunchAtLogin.swift, GlobalShortcut.swift
+## CodexLogin.swift:7, LaunchAtLogin.swift:7, GlobalShortcut.swift:9
 
 **Use main-actor Observation for standalone shared helpers.**
 
@@ -26,7 +26,7 @@ Before: `ObservableObject`, `@Published`, `@StateObject`/`@EnvironmentObject` th
 
 After: `@MainActor @Observable`, `@State`, and typed `@Environment` where shared. Actor-isolated hot-key teardown uses Swift 6.2 isolated deinitialization. The persistent AccountStore and Sparkle retain their justified AppStorage and Combine integration boundaries.
 
-## DashboardView.swift and DashboardMetrics.swift
+## DashboardView.swift:20 and DashboardMetrics.swift:9
 
 **Extract computed view sections and update time-sensitive summaries.**
 
@@ -34,7 +34,7 @@ Before: inline metric composition, `Date()` used only when the parent recomputed
 
 After: dedicated timeline-driven metrics with adaptive columns, locally derived accounts for the collection, and `localizedStandardContains()` for user search. `MetricTile` and `AccountFilter` each have a separate file.
 
-## AccountCard.swift, UsageMeter.swift, AccountSurface.swift
+## AccountCard.swift:4, UsageMeter.swift:9, AccountSurface.swift:5
 
 **Use accessible labels, readable native typography, and consistent surfaces.**
 
@@ -48,7 +48,7 @@ Before: `Int(value.rounded())` could show `0%` while allowance remained or `100%
 
 After: tested `AllowancePercent.display()` and `.spoken()` use `<1%` / `>99%` at the edges; VoiceOver follows the chosen remaining/used display mode.
 
-## ClientSwitchView.swift and ConnectAccountView.swift
+## ClientSwitchView.swift:14 and ConnectAccountView.swift:28
 
 **Allow sheets to fit smaller windows; separate actions from layout.**
 
@@ -56,7 +56,7 @@ Before: fixed widths with eager vertical content; switch/restore business logic 
 
 After: scrolling, flexible minimum/ideal sizes and named switch/restore actions. Credential replacement stays serialized with existing backup/rollback behavior; this review does not claim an asynchronous Keychain redesign or live subscription validation.
 
-## MenuBarView.swift and UsageHistoryView.swift
+## MenuBarView.swift:27 and UsageHistoryView.swift:34
 
 **Use lazy account stacks and consistent privacy layouts.**
 
