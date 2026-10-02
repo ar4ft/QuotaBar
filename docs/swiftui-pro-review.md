@@ -24,7 +24,7 @@ After: `GeneralSettings`, `MenuBarSettings`, `AlertSettings`, and `UpdateSetting
 
 Before: `ObservableObject`, `@Published`, `@StateObject`/`@EnvironmentObject` throughout the helpers.
 
-After: `@MainActor @Observable`, `@State`, and typed `@Environment` where shared. Actor-isolated hot-key teardown uses Swift 6.2 isolated deinitialization. The persistent AccountStore and Sparkle retain their justified AppStorage and Combine integration boundaries.
+After: `@MainActor @Observable`, `@State`, and typed `@Environment` where shared. Actor-isolated hot-key teardown uses Swift 6.2 isolated deinitialization. The process login completion is explicitly `@MainActor @Sendable`, so background process callbacks cannot invoke UI state outside its actor. The persistent AccountStore and Sparkle retain their justified AppStorage and Combine integration boundaries.
 
 ## DashboardView.swift:20 and DashboardMetrics.swift:9
 

@@ -1,6 +1,6 @@
 # QuotaBar
 
-A native macOS app for keeping multiple OpenAI and Claude subscription accounts in view. Written in Swift, with a SwiftUI dashboard and menu bar popover. macOS 14+, Xcode 16+. The app uses the pinned Sparkle 2.9.6 framework for signed automatic updates; the core has no external dependencies.
+A native macOS app for keeping multiple OpenAI and Claude subscription accounts in view. Written in Swift, with a SwiftUI dashboard and menu bar popover. macOS 14+, Xcode 26.2+ (Swift 6.2+). The app uses the pinned Sparkle 2.9.6 framework for signed automatic updates; the core has no external dependencies.
 
 ## What it does
 
@@ -233,7 +233,7 @@ The interface now follows Apple's [macOS design](https://developer.apple.com/des
 - System colors and semantic surface/separator colors adapt to light/dark appearances. Increase Contrast strengthens card boundaries. Status labels pair symbols with words, so color is never the only signal. Native progress indicators replace custom-drawn usage bars.
 - VoiceOver labels for icon controls, sidebar account counts, summary values, allowance meters, pin state, and history rows. Decorative symbols are hidden from accessibility. Presentation mode's accessible values remain private.
 - Settings is divided into General, Menu Bar, Alerts, and Updates tabs. Sheets use standard Cancel/Done buttons, keyboard actions, clearer destructive wording, and smaller/adaptive bounds for laptop displays.
-- An original macOS app icon is rendered at all standard 1×/2× icon sizes and packaged as `QuotaBar.icns`. Layer SVG artwork is under `Resources/AppIcon`; the deterministic AppKit renderer is `scripts/render-icon.swift`. The flattened icon supports macOS 14 and the current Xcode 16 build pipeline. Native Icon Composer/Liquid Glass icon compilation can be added when the build toolchain moves to Xcode 26.
+- An original macOS app icon is rendered at all standard 1×/2× icon sizes and packaged as `QuotaBar.icns`. Layer SVG artwork is under `Resources/AppIcon`; the deterministic AppKit renderer is `scripts/render-icon.swift`. The flattened icon supports macOS 14 and the Xcode 26.2 build pipeline. The icon remains a flattened compatibility asset; a native Icon Composer layered asset is a separate future enhancement.
 
 CI produces a separate **QuotaBar-UI-Previews** artifact containing native light/dark, high-contrast, compact-width, menu, Settings, Codex/Claude switching, and presentation-mode snapshots, plus the 1024px icon. Preview mode uses synthetic accounts with example.invalid addresses, private temporary preferences, and no credential reads, provider polling, or account-file writes. Run `QuotaBar.app/Contents/MacOS/QuotaBar --render-previews <directory>` on a Mac to reproduce them.
 

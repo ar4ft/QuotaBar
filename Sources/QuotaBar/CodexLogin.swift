@@ -1,5 +1,6 @@
 #if os(macOS)
 import Foundation
+import Observation
 import QuotaCore
 
 @MainActor
@@ -13,7 +14,7 @@ final class CodexLogin {
     private var timeoutTask: Task<Void, Never>?
     private var generation = UUID()
 
-    func start(root: URL, executable: String, completion: @escaping (Credential) -> Void) {
+    func start(root: URL, executable: String, completion: @escaping @MainActor @Sendable (Credential) -> Void) {
         cancel(); error = nil; output = "Starting an isolated Codex login…\n"
         let attempt = UUID(); generation = attempt
         do {
