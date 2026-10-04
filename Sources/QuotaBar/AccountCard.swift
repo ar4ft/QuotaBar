@@ -89,10 +89,11 @@ struct AccountCard: View {
                 if let plan = account.snapshot?.plan { Text(plan.capitalized).font(.caption.weight(.medium)).foregroundStyle(.secondary) }
             }
             HStack {
-                Button(selectedForClient ? "Selected" : "Use account",
-                       systemImage: selectedForClient ? "checkmark" : "arrow.left.arrow.right", action: useAccount)
-                    .disabled(refreshing || selectedForClient)
-                    .accessibilityLabel(selectedForClient ? "\(account.name) selected for the CLI" : "Use \(account.name) in the CLI")
+                Button(selectedForClient ? "Use again" : "Use account",
+                       systemImage: "arrow.left.arrow.right", action: useAccount)
+                    .disabled(refreshing)
+                    .help("Reapply this account if the CLI sign-in changed outside QuotaBar")
+                    .accessibilityLabel(selectedForClient ? "Reapply \(account.name) in the CLI" : "Use \(account.name) in the CLI")
                 Spacer()
                 Button("History", systemImage: "chart.xyaxis.line", action: history)
                     .accessibilityLabel("Usage history for " + account.name)

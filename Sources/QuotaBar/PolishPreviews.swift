@@ -57,6 +57,8 @@ struct PolishPreviews {
     private static func capture<V: View>(_ view: V, name: String, dark: Bool, contrast: Bool,
                                         size: NSSize, directory: URL) throws {
         let appearance: NSAppearance.Name = contrast ? .accessibilityHighContrastDarkAqua : dark ? .darkAqua : .aqua
+        // Native controls use AppKit appearance, not just SwiftUI's colorScheme.
+        NSApplication.shared.appearance = NSAppearance(named: appearance)
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .resizable],
                               backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: appearance)
@@ -74,6 +76,14 @@ struct PolishPreviews {
         hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
         guard let png = bitmap.representation(using: NSBitmapImageRep.FileType.png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
         try png.write(to: directory.appendingPathComponent(name + ".png"))
+        let metadata: [String: Any] = [
+            "appearance": appearance.rawValue,
+            "requestedHighContrastAppearance": contrast,
+            "systemIncreaseContrast": NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast,
+            "note": "Appearance preview only; a false systemIncreaseContrast does not exercise the full system accessibility setting."
+        ]
+        let data = try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: directory.appendingPathComponent(name + ".json"))
         window.close()
     }
 }

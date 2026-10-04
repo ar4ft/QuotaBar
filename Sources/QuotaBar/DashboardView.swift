@@ -26,6 +26,7 @@ struct DashboardView: View {
                     ForEach(AccountFilter.allCases) { item in
                         HStack {
                             Label(item.title, systemImage: item.symbol)
+                                .foregroundStyle(.primary)
                             Spacer()
                             Text("\(count(item))").monospacedDigit().foregroundStyle(.secondary)
                         }.tag(item)
