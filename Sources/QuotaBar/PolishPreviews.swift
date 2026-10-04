@@ -62,7 +62,6 @@ struct PolishPreviews {
         window.appearance = NSAppearance(named: appearance)
         window.isReleasedWhenClosed = false
         let hosting = NSHostingView(rootView: view.environment(\.colorScheme, dark ? .dark : .light)
-            .environment(\.colorSchemeContrast, contrast ? .increased : .standard)
             .background(Color(nsColor: .windowBackgroundColor)))
         hosting.frame = NSRect(origin: .zero, size: size)
         window.contentView = hosting
