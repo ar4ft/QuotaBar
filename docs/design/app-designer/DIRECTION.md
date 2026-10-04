@@ -43,3 +43,17 @@ Use Mac window sizes, native split view/sidebar/toolbars, scrollable sheets and 
 ## Verification
 
 App Designer's renderer/scanner is used on the HTML exploration at 3×. Local adaptation loads HTML and contact-sheet images from memory because browser file URLs are blocked; the scanner's phone dimensions are neutralized for desktop content. Native SwiftUI screenshots and CI are the implementation authority. HTML fonts on Linux are approximations, not claims of rendered SF Pro. Accessibility and live credentials still need hands-on Mac testing.
+
+## Keep-list check after implementation
+
+Checked means preserved in source and the applicable synthetic checks/previews, not live provider verification.
+
+- [x] OpenAI and Claude account monitoring, all reported windows, credits/reset credits.
+- [x] Reset times and their source account/window.
+- [x] Availability, errors, stale readings, refresh and reconnect actions.
+- [x] CLI switching, selected marker, credential reapplication and recovery.
+- [x] History/export routes and storage behavior.
+- [x] Grid/list, search, sorting and availability filtering.
+- [x] Presentation privacy, menu pinning/actions, settings and updates.
+
+User decisions outstanding: none for this iteration. The user chose the calm instrument-panel direction. Name, icon identity and navigation structure remain; the existing next-reset value is emphasized, not replaced by a different metric. See CRITIQUE.md for the scored rounds and verification limits.
