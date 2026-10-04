@@ -29,14 +29,13 @@ struct AccountCard: View {
         }
     }
     private var content: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
                 Image(systemName: account.provider.symbol).accessibilityHidden(true).font(.title3)
-                    .foregroundStyle(account.provider.tint).frame(width: 42, height: 42)
-                    .background(account.provider.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                    .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(account.name).font(.headline).lineLimit(2).textSelection(.enabled)
-                    Text(account.provider.title).font(.caption).foregroundStyle(account.provider.tint)
+                    Text(account.provider.title).font(.caption).foregroundStyle(.secondary)
                     Text(account.detail ?? account.provider.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer()
@@ -90,14 +89,16 @@ struct AccountCard: View {
                 if let plan = account.snapshot?.plan { Text(plan.capitalized).font(.caption.weight(.medium)).foregroundStyle(.secondary) }
             }
             HStack {
-                Button("Use account", systemImage: "arrow.left.arrow.right", action: useAccount)
-                    .disabled(refreshing).accessibilityLabel("Use \(account.name) in the CLI")
+                Button(selectedForClient ? "Selected" : "Use account",
+                       systemImage: selectedForClient ? "checkmark" : "arrow.left.arrow.right", action: useAccount)
+                    .disabled(refreshing || selectedForClient)
+                    .accessibilityLabel(selectedForClient ? "\(account.name) selected for the CLI" : "Use \(account.name) in the CLI")
                 Spacer()
                 Button("History", systemImage: "chart.xyaxis.line", action: history)
                     .accessibilityLabel("Usage history for " + account.name)
             }.controlSize(.small)
         }.padding(AppStyle.cardPadding).frame(maxWidth: .infinity, alignment: .leading)
-            .modifier(AccountSurface())
+            .modifier(AccountSurface(selected: selectedForClient))
             .accessibilityElement(children: .contain)
     }
 }

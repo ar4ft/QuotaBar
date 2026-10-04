@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-  echo "Build the macOS app on a Mac with Xcode 16 or newer."
+  echo "Build the macOS app on a Mac with Xcode 26.2 or newer."
   exit 1
 fi
 build_mode="${1:---unsigned}"
@@ -39,8 +39,8 @@ cat > "$bundle_dir/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIdentifier</key><string>com.quotabar.app</string>
   <key>CFBundleExecutable</key><string>QuotaBar</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.8.0</string>
-  <key>CFBundleVersion</key><string>8</string>
+  <key>CFBundleShortVersionString</key><string>0.9.0</string>
+  <key>CFBundleVersion</key><string>9</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>CFBundleIconFile</key><string>QuotaBar</string>
   <key>NSHighResolutionCapable</key><true/>

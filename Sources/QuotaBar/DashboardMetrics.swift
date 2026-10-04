@@ -9,21 +9,51 @@ struct DashboardMetrics: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
             let available = accounts.count { AccountAvailability.make($0, hasError: errorIDs.contains($0.id), now: context.date).status.isAvailable }
-            let reset = accounts.flatMap { $0.snapshot?.windows ?? [] }.compactMap(\.resetsAt).filter { $0 > context.date }.min()
-            let summaries = [
-                MetricSummary(title: "Connected", value: accounts.count.formatted(), detail: "subscription accounts", symbol: "person.2"),
-                MetricSummary(title: "Available", value: presentationMode ? "—" : available.formatted(), detail: "accounts with allowance left", symbol: "checkmark.circle"),
-                MetricSummary(title: "Next reset", value: presentationMode ? "—" : reset.map { countdown($0, now: context.date) } ?? "—", detail: "earliest upcoming window", symbol: "clock.arrow.circlepath")
-            ]
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: AppStyle.rowSpacing) {
-                    ForEach(summaries) { summary in MetricTile(summary: summary).frame(minWidth: 150) }
+            let next = accounts.flatMap { account in
+                (account.snapshot?.windows ?? []).compactMap { window -> ResetSummary? in
+                    guard let date = window.resetsAt, date > context.date else { return nil }
+                    return ResetSummary(date: date, detail: account.name + " · " + window.title)
                 }
-                VStack(spacing: AppStyle.rowSpacing) {
-                    ForEach(summaries) { summary in MetricTile(summary: summary) }
+            }.min { $0.date < $1.date }
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .bottom, spacing: 40) {
+                    resetSummary(next, now: context.date)
+                    Spacer(minLength: 16)
+                    connectionSummary(available: available)
+                }
+                VStack(alignment: .leading, spacing: 20) {
+                    resetSummary(next, now: context.date)
+                    connectionSummary(available: available)
                 }
             }
         }
+    }
+    private struct ResetSummary {
+        let date: Date
+        let detail: String
+    }
+    private func resetSummary(_ reset: ResetSummary?, now: Date) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Next reset").font(.callout).foregroundStyle(.secondary)
+            Text(presentationMode ? "—" : reset.map { countdown($0.date, now: now) } ?? "—")
+                .font(.largeTitle.bold()).monospacedDigit().tracking(-0.8)
+            Text(presentationMode ? "Reset details hidden" : reset?.detail ?? "No upcoming reset reported")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }.accessibilityElement(children: .combine)
+    }
+    private func connectionSummary(available: Int) -> some View {
+        HStack(alignment: .top, spacing: 28) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Connected").font(.callout).foregroundStyle(.secondary)
+                Text(accounts.count.formatted()).font(.title3.bold()).monospacedDigit()
+                Text("subscription accounts").font(.caption).foregroundStyle(.secondary)
+            }.accessibilityElement(children: .combine)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("With allowance").font(.callout).foregroundStyle(.secondary)
+                Text(presentationMode ? "—" : available.formatted()).font(.title3.bold()).monospacedDigit()
+                Text("including running low").font(.caption).foregroundStyle(.secondary)
+            }.accessibilityElement(children: .combine)
+        }.fixedSize(horizontal: true, vertical: false)
     }
     private func countdown(_ date: Date, now: Date) -> String {
         let minutes = max(1, Int(ceil(date.timeIntervalSince(now) / 60)))

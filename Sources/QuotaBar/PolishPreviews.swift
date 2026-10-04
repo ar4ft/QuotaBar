@@ -43,6 +43,13 @@ struct PolishPreviews {
                     dark: false, contrast: false, size: NSSize(width: 660, height: 780), directory: directory)
         try capture(ClientSwitchView(account: work).environmentObject(store), name: "switch-claude",
                     dark: true, contrast: false, size: NSSize(width: 660, height: 780), directory: directory)
+        defaults.set(true, forKey: "listLayout")
+        try capture(DashboardView().environmentObject(store).defaultAppStorage(defaults), name: "dashboard-list",
+                    dark: false, contrast: false, size: NSSize(width: 1120, height: 1000), directory: directory)
+        defaults.set(false, forKey: "listLayout")
+        store.activeCodexAccount = personal.id.uuidString
+        try capture(DashboardView().environmentObject(store).defaultAppStorage(defaults), name: "dashboard-selected",
+                    dark: false, contrast: false, size: NSSize(width: 1120, height: 900), directory: directory)
         store.presentationMode = true
         try capture(DashboardView().environmentObject(store).defaultAppStorage(defaults), name: "presentation-mode",
                     dark: false, contrast: false, size: NSSize(width: 1120, height: 760), directory: directory)
@@ -55,6 +62,7 @@ struct PolishPreviews {
         window.appearance = NSAppearance(named: appearance)
         window.isReleasedWhenClosed = false
         let hosting = NSHostingView(rootView: view.environment(\.colorScheme, dark ? .dark : .light)
+            .environment(\.colorSchemeContrast, contrast ? .increased : .standard)
             .background(Color(nsColor: .windowBackgroundColor)))
         hosting.frame = NSRect(origin: .zero, size: size)
         window.contentView = hosting

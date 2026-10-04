@@ -43,12 +43,6 @@ struct DashboardView: View {
             ScrollView {
                 let accounts = filtered
                 VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                    Button {
-                        store.showConnectionHealth = true
-                    } label: {
-                        Label(store.presentationMode ? "Connection health" : "Connection health · \(store.attentionCount) need attention",
-                              systemImage: "network")
-                    }.buttonStyle(.plain).foregroundStyle(.secondary)
                     DashboardMetrics(accounts: accounts, presentationMode: store.presentationMode,
                                      errorIDs: Set(store.errors.keys))
                     ViewThatFits(in: .horizontal) {
@@ -66,6 +60,11 @@ struct DashboardView: View {
                             ForEach(accounts) { account in card(account) }
                         }
                     }
+                    Button {
+                        store.showConnectionHealth = true
+                    } label: {
+                        Label(store.presentationMode ? "Connection health" : store.attentionCount == 0 ? "All connections healthy" : "\(store.attentionCount) connections need attention", systemImage: "network")
+                    }.buttonStyle(.plain).foregroundStyle(.secondary)
                     Text("OpenAI readings reflect Codex allowance. Limits and reset times come from each provider.")
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding(AppStyle.pagePadding).frame(maxWidth: 1350)
@@ -88,6 +87,7 @@ struct DashboardView: View {
                 }
             }
         }
+        .tint(AppStyle.signal)
         .frame(minWidth: 740, minHeight: 500)
         .onChange(of: store.presentationMode) { _, hidden in
             if hidden { search = ""; availableOnly = false; renameAccount = nil; deleting = nil; historyAccount = nil }

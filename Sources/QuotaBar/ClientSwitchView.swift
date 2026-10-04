@@ -18,7 +18,13 @@ struct ClientSwitchView: View {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }
-            Label("Select this subscription for \(client)", systemImage: "person.crop.circle.badge.checkmark").font(.headline)
+            VStack(alignment: .leading, spacing: 8) {
+                Label(finished ? "Selected for \(client)" : "Select this subscription for \(client)",
+                      systemImage: finished ? "checkmark.circle.fill" : "person.crop.circle.badge.checkmark")
+                    .font(.headline).foregroundStyle(finished ? AppStyle.signal : .primary)
+                Text(account.provider.title + " · " + (account.detail ?? account.name))
+                    .font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+            }
             Text("Quit \(client), its desktop app, and related editor sessions first. The switch applies to new sessions. The outgoing sign-in is saved in Keychain, including tokens refreshed by the client.")
                 .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if account.provider == .openAI {
@@ -49,6 +55,7 @@ struct ClientSwitchView: View {
             }
         }.padding(AppStyle.pagePadding)
         }.frame(minWidth: 540, idealWidth: 640, minHeight: 440, idealHeight: 600)
+        .tint(AppStyle.signal)
         .onChange(of: store.presentationMode) { _, hidden in if hidden { dismiss() } }
     }
     private func switchAccount() {

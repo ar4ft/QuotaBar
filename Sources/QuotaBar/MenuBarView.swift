@@ -30,7 +30,7 @@ struct MenuBarView: View {
                         ForEach(store.orderedAccounts) { account in
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {
-                                    Image(systemName: account.provider.symbol).foregroundStyle(account.provider.tint).accessibilityHidden(true)
+                                    Image(systemName: account.provider.symbol).foregroundStyle(.secondary).accessibilityHidden(true)
                                     Text(store.presentationMode ? account.provider.title + " account" : account.name).font(.headline).lineLimit(1)
                                     Spacer()
                                     Button { dashboard(); store.requestSwitch(account) } label: {
