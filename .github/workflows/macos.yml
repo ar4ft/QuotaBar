@@ -83,3 +83,58 @@ jobs:
             dist/QuotaBar-macOS.zip
             dist/QuotaBar-macOS.dmg
           if-no-files-found: error
+  publish-development-release:
+    name: Publish unsigned development release
+    needs: verify
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: development-release-${{ github.sha }}
+      cancel-in-progress: false
+    steps:
+      - name: Download verified installers
+        uses: actions/download-artifact@v4
+        with:
+          name: QuotaBar-macOS
+          path: dist
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_version="$(python3 - <<'PY'
+          import plistlib, re, zipfile
+          with zipfile.ZipFile('dist/QuotaBar-macOS.zip') as archive:
+              metadata = plistlib.loads(archive.read('QuotaBar.app/Contents/Info.plist'))
+          version = metadata['CFBundleShortVersionString']
+          if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
+              raise SystemExit('Packaged app version must be MAJOR.MINOR.PATCH.')
+          print(version)
+          PY
+          )"
+          release_tag="v${app_version}-dev.${GITHUB_SHA:0:12}"
+          sha256sum dist/QuotaBar-macOS.zip dist/QuotaBar-macOS.dmg | sed 's|dist/||' > dist/SHA256SUMS.txt
+          cat > "$RUNNER_TEMP/development-release.md" <<EOF
+          Unsigned development build of QuotaBar ${app_version}, for macOS 14 or newer (Apple Silicon and Intel).
+
+          Built from commit ${GITHUB_SHA} after tests, universal packaging, application launch, and synthetic account-switching checks passed.
+
+          Download the ZIP or DMG below. These installers have no Developer ID signing or Apple notarization, and do not enable automatic updates. Signed releases are created only through the manually dispatched signed-release workflow.
+
+          Build: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          EOF
+          if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            tagged_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$release_tag" --jq .sha)"
+            [[ "$tagged_commit" == "$GITHUB_SHA" ]] || { echo 'Release tag points to another commit.' >&2; exit 1; }
+            gh release upload "$release_tag" dist/QuotaBar-macOS.zip dist/QuotaBar-macOS.dmg dist/SHA256SUMS.txt \
+              --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$release_tag" dist/QuotaBar-macOS.zip dist/QuotaBar-macOS.dmg dist/SHA256SUMS.txt \
+              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "QuotaBar ${app_version} development (${GITHUB_SHA:0:7})" \
+              --notes-file "$RUNNER_TEMP/development-release.md" --prerelease --latest=false
+          fi
+          echo "Release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$release_tag" >> "$GITHUB_STEP_SUMMARY"
