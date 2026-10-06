@@ -4,7 +4,7 @@ import AppKit
 import QuotaCore
 
 struct MenuBarView: View {
-    var openSettings: () -> Void = {}
+    var openSettings: @MainActor () -> Void = {}
     @EnvironmentObject private var store: AccountStore
     @EnvironmentObject private var updater: AppUpdater
     @Environment(\.openWindow) private var openWindow

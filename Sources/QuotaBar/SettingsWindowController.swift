@@ -7,14 +7,14 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private static var shared: SettingsWindowController?
     static var settingsWindow: NSWindow? { shared?.window }
 
-    static func show(store: AccountStore, shortcut: GlobalShortcut, updater: AppUpdater, openWindow: OpenWindowAction) {
+    static func show(store: AccountStore, shortcut: GlobalShortcut, updater: AppUpdater) {
         if shared == nil {
-            shared = SettingsWindowController(store: store, shortcut: shortcut, updater: updater, openWindow: openWindow)
+            shared = SettingsWindowController(store: store, shortcut: shortcut, updater: updater)
         }
         shared?.showWindow(nil)
     }
 
-    private init(store: AccountStore, shortcut: GlobalShortcut, updater: AppUpdater, openWindow: OpenWindowAction) {
+    private init(store: AccountStore, shortcut: GlobalShortcut, updater: AppUpdater) {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 740, height: 640),
                               styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
@@ -28,9 +28,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.setFrameAutosaveName("QuotaBarSettings")
         window.delegate = self
         window.contentViewController = NSHostingController(rootView:
-            PreferencesView().environmentObject(store).environmentObject(updater).environment(shortcut)
-                .background(ShortcutBridge().environmentObject(store).environment(shortcut))
-                .environment(\.openWindow, openWindow))
+            PreferencesView().environmentObject(store).environmentObject(updater).environment(shortcut))
     }
 
     @available(*, unavailable)

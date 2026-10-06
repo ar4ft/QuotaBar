@@ -4,7 +4,7 @@ import AppKit
 import QuotaCore
 
 struct DashboardView: View {
-    var openSettings: () -> Void = {}
+    var openSettings: @MainActor () -> Void = {}
     @EnvironmentObject private var store: AccountStore
     @Environment(\.openWindow) private var openWindow
     @State private var filter: AccountFilter? = .all

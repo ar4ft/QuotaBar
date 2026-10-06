@@ -8,7 +8,6 @@ struct QuotaBarApp: App {
     @StateObject private var store = AccountStore()
     @State private var shortcut = GlobalShortcut()
     @StateObject private var updater = AppUpdater()
-    @Environment(\.openWindow) private var openWindow
     init() {
         StartupDiagnostics.record("App initializer started")
         if CommandLine.arguments.contains("--verify-client-switching") {
@@ -57,7 +56,7 @@ struct QuotaBarApp: App {
         }.menuBarExtraStyle(.window)
     }
     private func showSettings() {
-        SettingsWindowController.show(store: store, shortcut: shortcut, updater: updater, openWindow: openWindow)
+        SettingsWindowController.show(store: store, shortcut: shortcut, updater: updater)
     }
 }
 #else

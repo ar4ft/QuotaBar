@@ -1,11 +1,11 @@
 #if os(macOS)
 import SwiftUI
+import AppKit
 import QuotaCore
 
 struct GeneralSettings: View {
     @EnvironmentObject private var store: AccountStore
     @Environment(GlobalShortcut.self) private var shortcut
-    @Environment(\.scenePhase) private var scenePhase
     @State private var login = LaunchAtLogin()
     var body: some View {
         Form {
@@ -51,8 +51,15 @@ struct GeneralSettings: View {
         .contentMargins(.top, 8, for: .scrollContent)
         .softScrollEdges()
         .task { login.refresh() }
-        .onChange(of: scenePhase) { _, phase in if phase == .active { login.refresh() } }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in login.refresh() }
+        .onChange(of: store.shortcutEnabled) { _, _ in updateShortcut() }
+        .onChange(of: store.shortcutLetter) { _, _ in updateShortcut() }
+        .onChange(of: store.shortcutModifiersRaw) { _, _ in updateShortcut() }
     }
 
+    private func updateShortcut() {
+        shortcut.updateConfiguration(enabled: store.shortcutEnabled, letter: store.shortcutLetter,
+                                     modifiers: ShortcutModifiers(rawValue: store.shortcutModifiersRaw) ?? .controlOption)
+    }
 }
 #endif
