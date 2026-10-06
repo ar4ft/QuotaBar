@@ -62,6 +62,7 @@ final class AccountStore: ObservableObject {
     func retryDate(_ id: UUID) -> Date? { cooldowns[id] }
     let root: URL
     private let vault = KeychainVault()
+    private var credentialWrites = PendingCredentialWrites()
     private let client = UsageClient()
     private var cooldowns: [UUID: Date] = [:]
     private var resetCreditCooldowns: [UUID: Date] = [:]
@@ -72,13 +73,15 @@ final class AccountStore: ObservableObject {
     private var epoch: [UUID: UUID] = [:]
     var metadataURL: URL { root.appendingPathComponent("accounts.json") }
 
-    init(previewAccounts: [Account]? = nil, previewDefaults: UserDefaults? = nil) {
+    init(previewAccounts: [Account]? = nil, previewDefaults: UserDefaults? = nil, previewIssues: [UUID: ConnectionIssue] = [:]) {
         isPreview = previewAccounts != nil
         root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("QuotaBar", isDirectory: true)
         historyRepository = UsageHistoryRepository(directory: root.appendingPathComponent("History", isDirectory: true))
         if let previewAccounts {
             accounts = previewAccounts; writable = false
+            connectionIssues = previewIssues
+            errors = previewIssues.mapValues { $0 == .keychainAccess ? KeychainInteraction.permissionMessage : $0.title }
             if let previewDefaults {
                 _presentationMode = AppStorage(wrappedValue: false, "presentationMode", store: previewDefaults)
                 _showRemaining = AppStorage(wrappedValue: true, "showRemaining", store: previewDefaults)
@@ -138,17 +141,18 @@ final class AccountStore: ObservableObject {
         if account.name.isEmpty { account.name = credential.email ?? provider.title }
         let previous = accounts
         account.alertPreferences = accounts.first(where: { $0.id == account.id })?.alertPreferences
-        let previousCredential = replacing.flatMap { try? vault.load(id: $0) }
-        try vault.save(credential, id: account.id)
+        let previousCredential = replacing.flatMap { try? loadCredential(id: $0, allowAuthenticationUI: true) }
+        try saveCredential(credential, id: account.id, allowAuthenticationUI: true)
         if let index = accounts.firstIndex(where: { $0.id == account.id }) { accounts[index] = account }
         else { accounts.append(account) }
         do { try persist() }
         catch {
             accounts = previous
-            if let previousCredential { try? vault.save(previousCredential, id: account.id) }
-            else { try? vault.remove(id: account.id) }
+            if let previousCredential { try? saveCredential(previousCredential, id: account.id, allowAuthenticationUI: true) }
+            else { try? vault.remove(id: account.id, allowAuthenticationUI: true) }
             throw error
         }
+        credentialWrites.remove(account.id)
         epoch[account.id] = UUID(); cooldowns[account.id] = nil; resetCreditCooldowns[account.id] = nil; errors[account.id] = nil; connectionIssues[account.id] = nil
         // Wait for an older request to finish before refreshing the replacement.
         while refreshing.contains(account.id) { try await Task.sleep(for: .milliseconds(100)) }
@@ -167,7 +171,8 @@ final class AccountStore: ObservableObject {
         accounts.removeAll { $0.id == id }
         do {
             try persist()
-            try vault.remove(id: id)
+            try vault.remove(id: id, allowAuthenticationUI: true)
+            credentialWrites.remove(id)
             errors[id] = nil; connectionIssues[id] = nil; cooldowns[id] = nil; resetCreditCooldowns[id] = nil; epoch[id] = nil
             if pinnedAccountID == id.uuidString { pinAccount("") }
             resetAttempts[id] = nil; histories[id] = nil; historyErrors[id] = nil
@@ -186,7 +191,12 @@ final class AccountStore: ObservableObject {
             await refresh(id)
         }
     }
-    func refresh(_ id: UUID) async {
+    func allowKeychainAccess(_ id: UUID) async {
+        guard !presentationMode else { return }
+        // Only this explicit account action enables Keychain UI during a refresh.
+        await refresh(id, allowKeychainUI: true)
+    }
+    func refresh(_ id: UUID, allowKeychainUI: Bool = false) async {
         guard !isPreview else { return }
         guard !refreshing.contains(id), accounts.contains(where: { $0.id == id }), writable else { return }
         if let until = cooldowns[id], until > Date() { return }
@@ -197,23 +207,29 @@ final class AccountStore: ObservableObject {
         refreshing.insert(id)
         defer { refreshing.remove(id) }
         do {
-            var credential = try vault.load(id: id)
+            var credential = try loadCredential(id: id, allowAuthenticationUI: allowKeychainUI)
             if credential.externallyManaged == true,
                let account = accounts.first(where: { $0.id == id }),
                activeAccountID(account.provider) == id.uuidString {
-                let storage = try NativeClientStorage(provider: account.provider, codexHome: codexSwitchHome)
+                let storage = try NativeClientStorage(provider: account.provider, codexHome: codexSwitchHome,
+                    claudeKeychain: ClientSecrets(service: "Claude Code-credentials", account: NSUserName(),
+                                                 allowAuthenticationUI: allowKeychainUI))
                 if let live = try storage.read(), try live.belongs(to: credential) {
                     credential = try live.credential()
-                    try vault.save(credential, id: id)
+                    try saveCredential(credential, id: id, allowAuthenticationUI: allowKeychainUI)
                 }
             }
             var snapshot: UsageSnapshot
             do { snapshot = try await client.fetch(credential) }
             catch QuotaError.unauthorized where credential.refreshToken != nil && credential.externallyManaged != true {
                 // Serialize per account, then persist rotated credentials before another usage request.
+                // Check write permission before renewing a token that the provider may revoke.
+                try saveCredential(credential, id: id, allowAuthenticationUI: allowKeychainUI)
                 credential = try await client.refreshOwnedCodex(credential)
                 guard epoch[id] == generation else { return }
-                try vault.save(credential, id: id)
+                // The Keychain can lock while the network request is in flight.
+                credentialWrites.retain(credential, id: id)
+                try saveCredential(credential, id: id, allowAuthenticationUI: allowKeychainUI)
                 snapshot = try await client.fetch(credential)
             }
             if credential.kind == .codex, snapshot.availableResetCredits == nil,
@@ -251,8 +267,9 @@ final class AccountStore: ObservableObject {
             } catch { historyErrors[id] = "History could not be saved: \(error.localizedDescription)" }
         } catch {
             guard epoch[id] == generation else { return }
-            errors[id] = error.localizedDescription
-            connectionIssues[id] = ConnectionIssue.classify(error)
+            let permissionRequired = KeychainInteraction.requiresPermission(error)
+            errors[id] = permissionRequired ? KeychainInteraction.permissionMessage : error.localizedDescription
+            connectionIssues[id] = permissionRequired ? .keychainAccess : ConnectionIssue.classify(error)
             if case QuotaError.rateLimited(let until) = error { cooldowns[id] = until }
         }
     }
@@ -326,7 +343,7 @@ final class AccountStore: ObservableObject {
         let storage = try NativeClientStorage(provider: provider, codexHome: codexSwitchHome)
         guard let session = try storage.read() else { throw ClientSwitchError.incompleteSession }
         let credential = try session.credential()
-        if let replacing, let previous = try? vault.load(id: replacing), previous.kind == credential.kind,
+        if let replacing, let previous = try? loadCredential(id: replacing, allowAuthenticationUI: true), previous.kind == credential.kind,
            let id = previous.accountID, let currentID = credential.accountID, id != currentID {
             throw NSError(domain: "QuotaBar", code: 3, userInfo: [NSLocalizedDescriptionKey:
                 "The current CLI sign-in belongs to a different account. Add it as a new account instead."])
@@ -343,7 +360,7 @@ final class AccountStore: ObservableObject {
         }
         try NativeClientStorage.ensureStopped(account.provider)
         let storage = try NativeClientStorage(provider: account.provider, codexHome: codexSwitchHome)
-        let saved = try vault.load(id: account.id)
+        let saved = try loadCredential(id: account.id, allowAuthenticationUI: true)
         var replacement = try ClientSession(credential: saved)
         if let live = try storage.read(), try live.belongs(to: saved) { replacement = live }
         let original = try storage.rawSnapshot()
@@ -354,7 +371,7 @@ final class AccountStore: ObservableObject {
             // The CLI owns token renewal once this session is handed off, even if the switch later fails.
             var handedOff = try replacement.credential()
             handedOff.externallyManaged = true
-            try vault.save(handedOff, id: account.id)
+            try saveCredential(handedOff, id: account.id, allowAuthenticationUI: true)
         }
         setActive(account.id, provider: account.provider)
         switchMessage = "\(account.name) is selected for \(account.provider == .openAI ? "Codex" : "Claude Code"). Start a new CLI or editor session and verify its account before working. Desktop sign-in may be separate."
@@ -398,20 +415,32 @@ final class AccountStore: ObservableObject {
     }
     private func matchingAccount(_ session: ClientSession) throws -> Account? {
         for account in accounts where account.provider == session.provider {
-            let credential = try vault.load(id: account.id)
+            let credential = try loadCredential(id: account.id, allowAuthenticationUI: true)
             if try session.belongs(to: credential) { return account }
         }
         return nil
     }
     private func saveDisplaced(_ session: ClientSession) throws {
         let credential = try session.credential()
-        if let known = try matchingAccount(session) { try vault.save(credential, id: known.id); return }
+        if let known = try matchingAccount(session) { try saveCredential(credential, id: known.id, allowAuthenticationUI: true); return }
         var account = Account(provider: session.provider, name: credential.email ?? "Saved CLI sign-in", detail: credential.email)
         account.detail = credential.email ?? session.provider.subtitle
-        try vault.save(credential, id: account.id)
+        try saveCredential(credential, id: account.id, allowAuthenticationUI: true)
         accounts.append(account)
         do { try persist() }
-        catch { accounts.removeAll { $0.id == account.id }; try? vault.remove(id: account.id); throw error }
+        catch { accounts.removeAll { $0.id == account.id }; try? vault.remove(id: account.id, allowAuthenticationUI: true); throw error }
+    }
+    private func loadCredential(id: UUID, allowAuthenticationUI: Bool = false) throws -> Credential {
+        let vault = vault
+        return try credentialWrites.load(id: id,
+            read: { try vault.load(id: id, allowAuthenticationUI: allowAuthenticationUI) },
+            write: { try vault.save($0, id: id, allowAuthenticationUI: allowAuthenticationUI) })
+    }
+    private func saveCredential(_ credential: Credential, id: UUID, allowAuthenticationUI: Bool = false) throws {
+        let vault = vault
+        try credentialWrites.save(credential, id: id) {
+            try vault.save($0, id: id, allowAuthenticationUI: allowAuthenticationUI)
+        }
     }
     private func persist() throws {
         guard writable else { throw CocoaError(.fileWriteNoPermission) }

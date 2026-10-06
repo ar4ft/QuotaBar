@@ -54,6 +54,12 @@ final class GlobalShortcut {
                                          GetApplicationEventTarget(), 0, &hotKey)
         if status != noErr { error = "This shortcut is unavailable or used by another app. Choose another combination (\(status))." }
     }
+    // Settings is hosted by AppKit, so preserve the dashboard scene's open action.
+    func updateConfiguration(enabled: Bool, letter: String, modifiers: ShortcutModifiers) {
+        guard let action else { return }
+        configure(enabled: enabled, letter: letter, modifiers: modifiers, action: action)
+    }
+
     isolated deinit {
         if let hotKey { UnregisterEventHotKey(hotKey) }
         if let handler { RemoveEventHandler(handler) }

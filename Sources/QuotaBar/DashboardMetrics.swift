@@ -46,7 +46,7 @@ struct DashboardMetrics: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Connected").font(.callout).foregroundStyle(.secondary)
                 Text(accounts.count.formatted()).font(.title3.bold()).monospacedDigit()
-                Text("accounts").font(.caption).foregroundStyle(.secondary)
+                Text(accounts.count == 1 ? "account" : "accounts").font(.caption).foregroundStyle(.secondary)
             }.accessibilityElement(children: .combine)
             VStack(alignment: .leading, spacing: 6) {
                 Text("With allowance").font(.callout).foregroundStyle(.secondary)

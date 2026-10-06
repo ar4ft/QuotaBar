@@ -20,6 +20,9 @@ struct UpdateSettings: View {
                 }
             }
         }.formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .contentMargins(.top, 8, for: .scrollContent)
+        .softScrollEdges()
     }
 
 }

@@ -4,6 +4,7 @@ import AppKit
 import QuotaCore
 
 struct MenuBarView: View {
+    var openSettings: @MainActor () -> Void = {}
     @EnvironmentObject private var store: AccountStore
     @EnvironmentObject private var updater: AppUpdater
     @Environment(\.openWindow) private var openWindow
@@ -56,7 +57,8 @@ struct MenuBarView: View {
                                 ForEach(accounts.filter { $0.provider == provider }) { account in
                                     MenuAccountRow(account: account,
                                         useAccount: { dashboard(); store.requestSwitch(account) },
-                                        reconnect: { dashboard(); store.connect(account) })
+                                        reconnect: { dashboard(); store.connect(account) },
+                                        allowKeychainAccess: { dashboard(); Task { await store.allowKeychainAccess(account.id) } })
                                         .environmentObject(store)
                                 }
                             }
@@ -68,7 +70,7 @@ struct MenuBarView: View {
             HStack(spacing: 12) {
                 Button("Open Dashboard", action: dashboard).buttonStyle(.borderless)
                 Spacer()
-                SettingsLink { Image(systemName: "gearshape") }
+                Button(action: openSettings) { Image(systemName: "gearshape") }
                     .buttonStyle(.borderless).help("Settings").accessibilityLabel("Settings")
                 Menu {
                     Button("Keep Running in Menu Bar") { DashboardWindowController.keepRunningInMenuBar() }
@@ -89,7 +91,7 @@ struct MenuBarView: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("QuotaBar").font(.headline)
-                Text(store.presentationMode ? "Presentation mode" : "\(store.accounts.count) connected accounts")
+                Text(store.presentationMode ? "Presentation mode" : "\(store.accounts.count) connected \(store.accounts.count == 1 ? "account" : "accounts")")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()

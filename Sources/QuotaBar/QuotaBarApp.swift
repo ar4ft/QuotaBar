@@ -10,6 +10,11 @@ struct QuotaBarApp: App {
     @StateObject private var updater = AppUpdater()
     init() {
         StartupDiagnostics.record("App initializer started")
+        if let index = CommandLine.arguments.firstIndex(of: "--verify-keychain"),
+           CommandLine.arguments.indices.contains(index + 1) {
+            do { try KeychainChecks.run(path: CommandLine.arguments[index + 1]); exit(0) }
+            catch { fputs("Noninteractive Keychain checks failed: \(error.localizedDescription)\n", stderr); exit(1) }
+        }
         if CommandLine.arguments.contains("--verify-client-switching") {
             do { try ClientSwitchChecks.run(); exit(0) }
             catch { fputs("Native client-switch checks failed: \(error.localizedDescription)\n", stderr); exit(1) }
@@ -23,7 +28,7 @@ struct QuotaBarApp: App {
     }
     var body: some Scene {
         Window("QuotaBar", id: "dashboard") {
-            DashboardView().environmentObject(store)
+            DashboardView(openSettings: showSettings).environmentObject(store)
                 .background(ShortcutBridge().environmentObject(store).environment(shortcut))
                 .task {
                     StartupDiagnostics.record("Dashboard appeared")
@@ -32,6 +37,9 @@ struct QuotaBarApp: App {
         }.defaultSize(width: 1080, height: 740)
         .windowStyle(.automatic)
         .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…", action: showSettings).keyboardShortcut(",")
+            }
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { updater.check() }.disabled(!updater.canCheck)
             }
@@ -45,17 +53,15 @@ struct QuotaBarApp: App {
             }
         }
         MenuBarExtra {
-            MenuBarView().environmentObject(store).environmentObject(updater)
+            MenuBarView(openSettings: showSettings).environmentObject(store).environmentObject(updater)
                 .background(ShortcutBridge().environmentObject(store).environment(shortcut)).task { store.start(); updater.start() }
         } label: {
             // Keep the status-item label free of task/onAppear/background side effects.
             MenuBarLabel().environmentObject(store)
         }.menuBarExtraStyle(.window)
-        Settings {
-            PreferencesView().environmentObject(store).environment(shortcut).environmentObject(updater)
-                .background(ShortcutBridge().environmentObject(store).environment(shortcut))
-        }
-            .windowResizability(.contentSize)
+    }
+    private func showSettings() {
+        SettingsWindowController.show(store: store, shortcut: shortcut, updater: updater)
     }
 }
 #else

@@ -18,31 +18,36 @@ protocol ClientSecretStorage {
 struct ClientSecrets: ClientSecretStorage {
     let service: String
     let account: String
+    var allowAuthenticationUI = true
     private var query: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
     }
     func read() throws -> Data? {
-        var request = query
-        request[kSecReturnData as String] = true; request[kSecMatchLimit as String] = kSecMatchLimitOne
-        var value: CFTypeRef?
-        let status = SecItemCopyMatching(request as CFDictionary, &value)
-        if status == errSecItemNotFound { return nil }
-        try check(status)
-        guard let data = value as? Data else { throw QuotaError.invalidCredentials }
-        return data
+        try KeychainInteraction.perform(allowUI: allowAuthenticationUI) {
+            var request = query
+            request[kSecReturnData as String] = true; request[kSecMatchLimit as String] = kSecMatchLimitOne
+            var value: CFTypeRef?
+            let status = SecItemCopyMatching(request as CFDictionary, &value)
+            if status == errSecItemNotFound { return nil }
+            try check(status)
+            guard let data = value as? Data else { throw QuotaError.invalidCredentials }
+            return data
+        }
     }
     func write(_ data: Data?) throws {
-        guard let data else {
-            let status = SecItemDelete(query as CFDictionary)
-            if status != errSecItemNotFound { try check(status) }
-            return
+        try KeychainInteraction.perform(allowUI: allowAuthenticationUI) {
+            guard let data else {
+                let status = SecItemDelete(query as CFDictionary)
+                if status != errSecItemNotFound { try check(status) }
+                return
+            }
+            let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+            if status == errSecItemNotFound {
+                var entry = query; entry[kSecValueData as String] = data
+                entry[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+                try check(SecItemAdd(entry as CFDictionary, nil))
+            } else { try check(status) }
         }
-        let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        if status == errSecItemNotFound {
-            var entry = query; entry[kSecValueData as String] = data
-            entry[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-            try check(SecItemAdd(entry as CFDictionary, nil))
-        } else { try check(status) }
     }
     private func check(_ status: OSStatus) throws {
         guard status == errSecSuccess else {

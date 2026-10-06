@@ -4,6 +4,7 @@ import AppKit
 import QuotaCore
 
 struct DashboardView: View {
+    var openSettings: @MainActor () -> Void = {}
     @EnvironmentObject private var store: AccountStore
     @Environment(\.openWindow) private var openWindow
     @State private var filter: AccountFilter? = .all
@@ -65,7 +66,7 @@ struct DashboardView: View {
                         ContentUnavailableView("No matching accounts", systemImage: "line.3.horizontal.decrease.circle",
                                                description: Text("Try another search or turn off the availability filter."))
                     } else if listLayout {
-                        LazyVStack(spacing: 12) { ForEach(accounts) { account in card(account) } }
+                        LazyVStack(spacing: 8) { ForEach(accounts) { account in card(account, compact: true) } }
                     } else {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16, alignment: .top)], alignment: .leading, spacing: 16) {
                             ForEach(accounts) { account in card(account) }
@@ -74,14 +75,14 @@ struct DashboardView: View {
                     Button {
                         store.showConnectionHealth = true
                     } label: {
-                        Label(store.presentationMode ? "Connection health" : store.attentionCount == 0 ? "All connections healthy" : "\(store.attentionCount) connections need attention", systemImage: "network")
+                        Label(store.presentationMode ? "Connection health" : store.attentionCount == 0 ? "All connections healthy" : "\(store.attentionCount) \(store.attentionCount == 1 ? "connection needs" : "connections need") attention", systemImage: "network")
                     }.buttonStyle(.plain).foregroundStyle(.secondary)
                     Text("OpenAI readings reflect Codex allowance. Limits and reset times come from each provider.")
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding(AppStyle.pagePadding).frame(maxWidth: 1350)
             }.background(Color(nsColor: .windowBackgroundColor))
             .navigationTitle(filter?.title ?? "All accounts")
-            .navigationSubtitle(store.accounts.isEmpty ? "Subscription accounts" : "\(filtered.count) accounts")
+            .navigationSubtitle(store.accounts.isEmpty ? "Subscription accounts" : "\(filtered.count) \(filtered.count == 1 ? "account" : "accounts")")
             .searchable(text: $search, placement: .toolbar, prompt: "Find an account")
             .toolbar {
                 ToolbarItemGroup {
@@ -107,12 +108,12 @@ struct DashboardView: View {
         .task {
             StartupDiagnostics.verifyResponsivenessIfRequested(reopenDashboard: {
                 DashboardWindowController.showDashboard { openWindow(id: "dashboard") }
-            }, clock: { store.clock })
+            }, openSettings: openSettings, clock: { store.clock })
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { notification in
             guard let window = notification.object as? NSWindow,
                   window === DashboardWindowController.window else { return }
-            NSApplication.shared.setActivationPolicy(.accessory)
+            AppWindowActivation.update(excluding: window)
         }
         .onChange(of: store.presentationMode) { _, hidden in
             if hidden { search = ""; availableOnly = false; renameAccount = nil; deleting = nil; historyAccount = nil }
@@ -153,13 +154,15 @@ struct DashboardView: View {
             Button("Add account") { store.connect() }.buttonStyle(.borderedProminent).disabled(store.presentationMode)
         }.frame(maxWidth: .infinity).padding(.vertical, 40)
     }
-    private func card(_ account: Account) -> some View {
+    private func card(_ account: Account, compact: Bool = false) -> some View {
         AccountCard(account: account, error: store.errors[account.id], refreshing: store.refreshing.contains(account.id),
                     showRemaining: store.showRemaining, presentationMode: store.presentationMode, forecast: store.forecast(account), availability: store.availability(account),
                     history: { historyAccount = account },
                     refresh: { Task { await store.refresh(account.id) } }, reconnect: { store.connect(account) },
                     rename: { newName = account.name; renameAccount = account }, remove: { deleting = account },
-                    useAccount: { store.requestSwitch(account) }, selectedForClient: store.activeAccountID(account.provider) == account.id.uuidString)
+                    useAccount: { store.requestSwitch(account) }, selectedForClient: store.activeAccountID(account.provider) == account.id.uuidString, compact: compact,
+                    keychainAccessRequired: store.connectionIssues[account.id] == .keychainAccess,
+                    allowKeychainAccess: { Task { await store.allowKeychainAccess(account.id) } })
     }
     private func count(_ item: AccountFilter) -> Int {
         store.accounts.filter { item == .all || $0.provider.rawValue == item.rawValue }.count

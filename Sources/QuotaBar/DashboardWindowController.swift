@@ -20,7 +20,7 @@ enum DashboardWindowController {
     static func keepRunningInMenuBar() {
         window?.performClose(nil)
         // A presented sheet may prevent closing; preserve the Dock in that case.
-        if window?.isVisible != true { NSApplication.shared.setActivationPolicy(.accessory) }
+        if window?.isVisible != true { AppWindowActivation.update() }
     }
 }
 

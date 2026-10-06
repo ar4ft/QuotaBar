@@ -39,8 +39,8 @@ cat > "$bundle_dir/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIdentifier</key><string>com.quotabar.app</string>
   <key>CFBundleExecutable</key><string>QuotaBar</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.10.0</string>
-  <key>CFBundleVersion</key><string>11</string>
+  <key>CFBundleShortVersionString</key><string>0.11.0</string>
+  <key>CFBundleVersion</key><string>12</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>CFBundleIconFile</key><string>QuotaBar</string>
   <key>NSHighResolutionCapable</key><true/>

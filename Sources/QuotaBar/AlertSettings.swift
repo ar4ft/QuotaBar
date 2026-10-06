@@ -64,6 +64,9 @@ struct AlertSettings: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }.formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .contentMargins(.top, 8, for: .scrollContent)
+        .softScrollEdges()
         .task { await store.refreshNotificationAuthorization(); selectAlertAccount() }
         .onChange(of: store.accounts.map(\.id)) { _, _ in selectAlertAccount() }
     }

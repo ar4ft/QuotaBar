@@ -7,15 +7,16 @@ struct UsageMeter: View {
     let window: UsageWindow
     let tint: Color
     let showRemaining: Bool
+    var compact = false
     var body: some View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
             let awaitingReset = window.resetsAt.map { $0 <= context.date } ?? false
             let percent = showRemaining ? window.remainingPercent : window.usedPercent
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: compact ? 4 : 8) {
                 Text(window.title).font(.caption.weight(.medium)).foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Text(awaitingReset ? "—" : AllowancePercent.display(showRemaining ? window.remainingPercent : window.usedPercent))
-                    .font(.title2.weight(.semibold)).monospacedDigit().tracking(-0.5)
+                    .font((compact ? Font.title3 : Font.title2).weight(.semibold)).monospacedDigit().tracking(-0.5)
                     .contentTransition(.numericText())
                     .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: percent)
                 Text(showRemaining ? "left" : "used").font(.caption).foregroundStyle(.secondary)

@@ -32,8 +32,9 @@ struct ConnectionHealthView: View {
                                     Text(account.provider.title).font(.caption).foregroundStyle(.secondary)
                                     Spacer()
                                     if store.refreshing.contains(account.id) { ProgressView().controlSize(.small) }
-                                    Button(health.needsReconnect ? "Reconnect…" : "Refresh") {
-                                        if health.needsReconnect { dismiss(); store.connect(account) }
+                                    Button(store.connectionIssues[account.id] == .keychainAccess ? "Allow Keychain access…" : health.needsReconnect ? "Reconnect…" : "Refresh") {
+                                        if store.connectionIssues[account.id] == .keychainAccess { Task { await store.allowKeychainAccess(account.id) } }
+                                        else if health.needsReconnect { dismiss(); store.connect(account) }
                                         else { Task { await store.refresh(account.id) } }
                                     }.disabled(store.refreshing.contains(account.id) || (store.retryDate(account.id).map { $0 > store.clock } ?? false))
                                 }
