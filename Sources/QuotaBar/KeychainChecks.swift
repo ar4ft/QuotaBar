@@ -24,8 +24,9 @@ enum KeychainChecks {
         let added = service.withCString { serviceBytes in
             account.withCString { accountBytes in
                 secret.withUnsafeBytes { secretBytes in
-                    SecKeychainAddGenericPassword(keychain, UInt32(service.utf8.count), serviceBytes,
-                        UInt32(account.utf8.count), accountBytes, UInt32(secretBytes.count), secretBytes.baseAddress, nil)
+                    guard let secretAddress = secretBytes.baseAddress else { return errSecParam }
+                    return SecKeychainAddGenericPassword(keychain, UInt32(service.utf8.count), serviceBytes,
+                        UInt32(account.utf8.count), accountBytes, UInt32(secretBytes.count), secretAddress, nil)
                 }
             }
         }
@@ -52,6 +53,17 @@ enum KeychainChecks {
             try require(result == errSecInteractionNotAllowed || result == errSecAuthFailed)
             try require(KeychainInteraction.requiresPermission(NSError(domain: NSOSStatusErrorDomain, code: Int(result))))
         }
+        let copyStatus = try KeychainInteraction.perform(allowUI: false) {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service, kSecAttrAccount as String: account,
+                kSecMatchSearchList as String: [keychain],
+                kSecMatchLimit as String: kSecMatchLimitOne, kSecReturnData as String: true
+            ]
+            var value: CFTypeRef?
+            return SecItemCopyMatching(query as CFDictionary, &value)
+        }
+        try require(copyStatus == errSecInteractionNotAllowed || copyStatus == errSecAuthFailed)
         try require(Date().timeIntervalSince(started) < 5)
         do {
             try KeychainInteraction.perform(allowUI: false) { throw Failure.checkFailed }

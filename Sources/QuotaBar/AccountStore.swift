@@ -72,13 +72,15 @@ final class AccountStore: ObservableObject {
     private var epoch: [UUID: UUID] = [:]
     var metadataURL: URL { root.appendingPathComponent("accounts.json") }
 
-    init(previewAccounts: [Account]? = nil, previewDefaults: UserDefaults? = nil) {
+    init(previewAccounts: [Account]? = nil, previewDefaults: UserDefaults? = nil, previewIssues: [UUID: ConnectionIssue] = [:]) {
         isPreview = previewAccounts != nil
         root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("QuotaBar", isDirectory: true)
         historyRepository = UsageHistoryRepository(directory: root.appendingPathComponent("History", isDirectory: true))
         if let previewAccounts {
             accounts = previewAccounts; writable = false
+            connectionIssues = previewIssues
+            errors = previewIssues.mapValues { $0 == .keychainAccess ? KeychainInteraction.permissionMessage : $0.title }
             if let previewDefaults {
                 _presentationMode = AppStorage(wrappedValue: false, "presentationMode", store: previewDefaults)
                 _showRemaining = AppStorage(wrappedValue: true, "showRemaining", store: previewDefaults)

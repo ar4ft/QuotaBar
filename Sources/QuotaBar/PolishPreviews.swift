@@ -83,6 +83,12 @@ struct PolishPreviews {
             try capture(DashboardView().environmentObject(crowdedStore).defaultAppStorage(defaults), name: name,
                         dark: dark, contrast: false, size: NSSize(width: width, height: 1000), directory: directory)
         }
+        let blockedStore = AccountStore(previewAccounts: [personal], previewDefaults: defaults,
+                                        previewIssues: [personal.id: .keychainAccess])
+        try capture(DashboardView().environmentObject(blockedStore).defaultAppStorage(defaults), name: "dashboard-keychain-permission",
+                    dark: false, contrast: false, size: NSSize(width: 800, height: 760), directory: directory)
+        try capture(MenuBarView().environmentObject(blockedStore).environmentObject(updater), name: "menu-keychain-permission",
+                    dark: true, contrast: false, size: NSSize(width: 380, height: 300), directory: directory)
         store.presentationMode = true
         try capture(MenuBarView().environmentObject(store).environmentObject(updater), name: "menu-private",
                     dark: false, contrast: false, size: NSSize(width: 380, height: 340), directory: directory)
