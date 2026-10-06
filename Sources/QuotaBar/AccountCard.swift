@@ -49,22 +49,22 @@ struct AccountCard: View {
                 }
             }
             if let snapshot = account.snapshot {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 16, alignment: .top)], alignment: .leading, spacing: 16) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 110), spacing: 16, alignment: .top),
+                                         count: min(2, max(1, mainWindows.count))), alignment: .leading, spacing: 16) {
                     ForEach(mainWindows) { window in
                         UsageMeter(window: window, tint: account.provider.tint, showRemaining: showRemaining)
                     }
                 }
-                if !additionalWindows.isEmpty || account.provider == .openAI || forecast != nil {
-                    DisclosureGroup("Usage details") {
-                        VStack(alignment: .leading, spacing: 16) {
-                            CreditSummary(snapshot: snapshot, provider: account.provider)
-                            ForEach(additionalWindows) { window in
-                                UsageMeter(window: window, tint: account.provider.tint, showRemaining: showRemaining)
-                            }
-                            if let forecast { ForecastSummary(forecast: forecast) }
-                        }.padding(.top, 10)
-                    }.font(.caption).foregroundStyle(.secondary)
-                }
+                DisclosureGroup("Usage details") {
+                    VStack(alignment: .leading, spacing: 16) {
+                        CreditSummary(snapshot: snapshot, provider: account.provider)
+                        ForEach(additionalWindows) { window in
+                            UsageMeter(window: window, tint: account.provider.tint, showRemaining: showRemaining)
+                        }
+                        if let forecast { ForecastSummary(forecast: forecast) }
+                        Text("Last reading: " + snapshot.fetchedAt.formatted(date: .abbreviated, time: .shortened))
+                    }.padding(.top, 10)
+                }.font(.caption).foregroundStyle(.secondary)
             } else {
                 HStack(spacing: 8) {
                     Image(systemName: "chart.bar.xaxis").accessibilityHidden(true)
