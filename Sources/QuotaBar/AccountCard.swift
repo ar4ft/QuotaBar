@@ -104,13 +104,13 @@ struct AccountCard: View {
                 .background(Color(nsColor: .quaternaryLabelColor).opacity(0.5), in: RoundedRectangle(cornerRadius: 9))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text(account.name).font(.headline).lineLimit(2).textSelection(.enabled)
+                Text(account.name).font(.headline).lineLimit(2).textSelection(.enabled).help(account.name)
                 HStack(spacing: 5) {
                     Text(account.provider.title)
                     if let plan = account.snapshot?.plan { Text("·"); Text(plan.capitalized) }
                 }.font(.caption).foregroundStyle(.secondary)
                 if let detail = account.detail {
-                    Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1).textSelection(.enabled)
+                    Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1).textSelection(.enabled).help(detail)
                 }
             }
             Spacer(minLength: 0)

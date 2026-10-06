@@ -7,8 +7,15 @@ struct AccountSurface: ViewModifier {
     @Environment(\.colorSchemeContrast) private var contrast
     @State private var hovered = false
     func body(content: Content) -> some View {
-        content.background(Color(nsColor: scheme == .dark ? .controlColor : .controlBackgroundColor),
-                           in: RoundedRectangle(cornerRadius: AppStyle.cardRadius))
+        content.background {
+            RoundedRectangle(cornerRadius: AppStyle.cardRadius)
+                .fill(Color(nsColor: scheme == .dark ? .windowBackgroundColor : .controlBackgroundColor))
+                .overlay {
+                    if scheme == .dark {
+                        RoundedRectangle(cornerRadius: AppStyle.cardRadius).fill(.white.opacity(0.04))
+                    }
+                }
+        }
             .overlay {
                 RoundedRectangle(cornerRadius: AppStyle.cardRadius)
                     .strokeBorder(selected ? AppStyle.signal.opacity(contrast == .increased ? 1 : 0.7) : Color(nsColor: .separatorColor).opacity(contrast == .increased ? 1 : 0.5),

@@ -20,6 +20,7 @@ struct MenuAccountRow: View {
                 HStack(spacing: 5) {
                     Text(store.presentationMode ? account.provider.title + " account" : account.name)
                         .font(.callout.weight(.semibold)).lineLimit(1)
+                        .help(store.presentationMode ? "Account details hidden" : account.name)
                     if !store.presentationMode && selected {
                         Image(systemName: "checkmark.circle.fill").foregroundStyle(AppStyle.signal)
                             .help("Selected for CLI").accessibilityLabel("Selected for CLI")
@@ -33,6 +34,7 @@ struct MenuAccountRow: View {
                     Text("Details hidden").font(.caption).foregroundStyle(.secondary)
                 } else {
                     Text(account.detail ?? account.provider.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        .help(account.detail ?? account.provider.subtitle)
                     AccountStatusLabel(status: availability.status, compact: true)
                         .help(store.errors[account.id] ?? availability.status.title)
                 }
