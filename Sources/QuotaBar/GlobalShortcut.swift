@@ -74,8 +74,7 @@ struct ShortcutBridge: View {
     private func configure() {
         shortcut.configure(enabled: store.shortcutEnabled, letter: store.shortcutLetter,
                            modifiers: ShortcutModifiers(rawValue: store.shortcutModifiersRaw) ?? .controlOption) {
-            openWindow(id: "dashboard")
-            NSApplication.shared.activate(ignoringOtherApps: true)
+            DashboardWindowController.showDashboard { openWindow(id: "dashboard") }
         }
     }
 }

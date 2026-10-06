@@ -17,6 +17,8 @@ struct GeneralSettings: View {
                 Text("Hides account identities and balances and silences usage alerts. Existing QuotaBar notifications are cleared when enabled.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show remaining allowance in dashboard", isOn: $store.showRemaining)
+                Text("Closing the dashboard keeps QuotaBar running in the menu bar. Reopen it from the menu bar or your keyboard shortcut. Quit QuotaBar stops monitoring.")
+                    .font(.caption).foregroundStyle(.secondary)
                 LaunchAtLoginToggle(login: login)
                 if login.requiresApproval {
                     Text("Approve QuotaBar in Login Items to finish enabling launch at login.")

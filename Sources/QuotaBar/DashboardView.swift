@@ -1,9 +1,11 @@
 #if os(macOS)
 import SwiftUI
+import AppKit
 import QuotaCore
 
 struct DashboardView: View {
     @EnvironmentObject private var store: AccountStore
+    @Environment(\.openWindow) private var openWindow
     @State private var filter: AccountFilter? = .all
     @State private var search = ""
     @AppStorage("listLayout") private var listLayout = false
@@ -37,18 +39,26 @@ struct DashboardView: View {
             }.listStyle(.sidebar)
                 .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 280)
                 .safeAreaInset(edge: .bottom) {
-                    Label("Stored on this Mac", systemImage: "lock.shield")
-                        .font(.caption).foregroundStyle(.secondary).padding(16)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Runs in your menu bar", systemImage: "menubar.rectangle")
+                        Label("Stored on this Mac", systemImage: "lock.shield")
+                    }.font(.caption).foregroundStyle(.secondary).padding(16)
                 }
         } detail: {
             ScrollView {
                 let accounts = filtered
                 VStack(alignment: .leading, spacing: AppStyle.sectionSpacing) {
-                    DashboardMetrics(accounts: accounts, presentationMode: store.presentationMode,
-                                     errorIDs: Set(store.errors.keys))
-                    ViewThatFits(in: .horizontal) {
-                        HStack { accountControls }
-                        VStack(alignment: .leading, spacing: 12) { accountControls }
+                    if !store.accounts.isEmpty {
+                        DashboardMetrics(accounts: accounts, presentationMode: store.presentationMode,
+                                         errorIDs: Set(store.errors.keys))
+                        Divider()
+                        ViewThatFits(in: .horizontal) {
+                            HStack { Text("Accounts").font(.headline); Spacer(); accountControls }
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Accounts").font(.headline)
+                                HStack { accountControls }
+                            }
+                        }
                     }
                     if store.accounts.isEmpty { emptyState }
                     else if accounts.isEmpty {
@@ -71,7 +81,7 @@ struct DashboardView: View {
                 }.padding(AppStyle.pagePadding).frame(maxWidth: 1350)
             }.background(Color(nsColor: .windowBackgroundColor))
             .navigationTitle(filter?.title ?? "All accounts")
-            .navigationSubtitle("\(filtered.count) connected")
+            .navigationSubtitle(store.accounts.isEmpty ? "Subscription accounts" : "\(filtered.count) accounts")
             .searchable(text: $search, placement: .toolbar, prompt: "Find an account")
             .toolbar {
                 ToolbarItemGroup {
@@ -85,11 +95,25 @@ struct DashboardView: View {
                     }.help("Refresh all accounts").disabled(!store.refreshing.isEmpty)
                     Button { store.connect() } label: { Label("Add account", systemImage: "plus") }
                         .help("Add an account").disabled(store.presentationMode)
+                    Button { DashboardWindowController.keepRunningInMenuBar() } label: {
+                        Label("Keep Running in Menu Bar", systemImage: "menubar.rectangle")
+                    }.help("Close the dashboard and keep monitoring in the menu bar")
                 }
             }
         }
         .tint(AppStyle.signal)
         .frame(minWidth: 740, minHeight: 500)
+        .background(DashboardWindowBridge().frame(width: 0, height: 0))
+        .task {
+            StartupDiagnostics.verifyResponsivenessIfRequested(reopenDashboard: {
+                DashboardWindowController.showDashboard { openWindow(id: "dashboard") }
+            }, clock: { store.clock })
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { notification in
+            guard let window = notification.object as? NSWindow,
+                  window === DashboardWindowController.window else { return }
+            NSApplication.shared.setActivationPolicy(.accessory)
+        }
         .onChange(of: store.presentationMode) { _, hidden in
             if hidden { search = ""; availableOnly = false; renameAccount = nil; deleting = nil; historyAccount = nil }
         }
@@ -111,8 +135,6 @@ struct DashboardView: View {
         } message: { Text(store.globalError ?? "") }
     }
     @ViewBuilder private var accountControls: some View {
-        Text("Accounts").font(.headline).accessibilityAddTraits(.isHeader)
-        Spacer(minLength: 12)
         Toggle("Available only", isOn: $availableOnly).disabled(store.presentationMode).toggleStyle(.checkbox)
         Picker("Sort accounts", selection: $store.accountSortRaw) {
             ForEach(AccountSort.allCases) { Text($0.title).tag($0.rawValue) }
