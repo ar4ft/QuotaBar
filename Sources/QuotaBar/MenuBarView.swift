@@ -91,7 +91,7 @@ struct MenuBarView: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("QuotaBar").font(.headline)
-                Text(store.presentationMode ? "Presentation mode" : "\(store.accounts.count) connected accounts")
+                Text(store.presentationMode ? "Presentation mode" : "\(store.accounts.count) connected \(store.accounts.count == 1 ? "account" : "accounts")")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()

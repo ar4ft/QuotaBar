@@ -75,14 +75,14 @@ struct DashboardView: View {
                     Button {
                         store.showConnectionHealth = true
                     } label: {
-                        Label(store.presentationMode ? "Connection health" : store.attentionCount == 0 ? "All connections healthy" : "\(store.attentionCount) connections need attention", systemImage: "network")
+                        Label(store.presentationMode ? "Connection health" : store.attentionCount == 0 ? "All connections healthy" : "\(store.attentionCount) \(store.attentionCount == 1 ? "connection needs" : "connections need") attention", systemImage: "network")
                     }.buttonStyle(.plain).foregroundStyle(.secondary)
                     Text("OpenAI readings reflect Codex allowance. Limits and reset times come from each provider.")
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding(AppStyle.pagePadding).frame(maxWidth: 1350)
             }.background(Color(nsColor: .windowBackgroundColor))
             .navigationTitle(filter?.title ?? "All accounts")
-            .navigationSubtitle(store.accounts.isEmpty ? "Subscription accounts" : "\(filtered.count) accounts")
+            .navigationSubtitle(store.accounts.isEmpty ? "Subscription accounts" : "\(filtered.count) \(filtered.count == 1 ? "account" : "accounts")")
             .searchable(text: $search, placement: .toolbar, prompt: "Find an account")
             .toolbar {
                 ToolbarItemGroup {

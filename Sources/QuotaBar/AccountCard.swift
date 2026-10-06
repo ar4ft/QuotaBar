@@ -43,7 +43,7 @@ struct AccountCard: View {
         VStack(alignment: .leading, spacing: 18) {
             header
             HStack(spacing: 8) {
-                AccountStatusLabel(status: availability.status, compact: true)
+                statusLabel
                 Spacer(minLength: 0)
                 if selectedForClient {
                     Label("Selected for CLI", systemImage: "checkmark.circle.fill")
@@ -91,6 +91,12 @@ struct AccountCard: View {
             .modifier(AccountSurface(selected: selectedForClient))
             .accessibilityElement(children: .contain)
     }
+    @ViewBuilder private var statusLabel: some View {
+        if keychainAccessRequired {
+            Label("Keychain permission needed", systemImage: "lock")
+                .font(.caption).foregroundStyle(.orange)
+        } else { AccountStatusLabel(status: availability.status, compact: true) }
+    }
     private var compactContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             ViewThatFits(in: .horizontal) {
@@ -101,7 +107,7 @@ struct AccountCard: View {
                 VStack(alignment: .leading, spacing: 12) { header; compactMeters }
             }
             HStack(spacing: 8) {
-                AccountStatusLabel(status: availability.status, compact: true)
+                statusLabel
                 if selectedForClient {
                     Label("CLI", systemImage: "checkmark.circle.fill")
                         .font(.caption).foregroundStyle(AppStyle.signal).help("Selected for CLI")
