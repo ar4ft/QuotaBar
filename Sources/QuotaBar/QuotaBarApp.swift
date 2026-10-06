@@ -10,6 +10,10 @@ struct QuotaBarApp: App {
     @StateObject private var updater = AppUpdater()
     init() {
         StartupDiagnostics.record("App initializer started")
+        if CommandLine.arguments.contains("--verify-keychain") {
+            do { try KeychainChecks.run(); exit(0) }
+            catch { fputs("Noninteractive Keychain checks failed: \(error.localizedDescription)\n", stderr); exit(1) }
+        }
         if CommandLine.arguments.contains("--verify-client-switching") {
             do { try ClientSwitchChecks.run(); exit(0) }
             catch { fputs("Native client-switch checks failed: \(error.localizedDescription)\n", stderr); exit(1) }

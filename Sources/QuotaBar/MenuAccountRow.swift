@@ -9,6 +9,7 @@ struct MenuAccountRow: View {
     let account: Account
     let useAccount: () -> Void
     let reconnect: () -> Void
+    var allowKeychainAccess: () -> Void = {}
     private var selected: Bool { store.activeAccountID(account.provider) == account.id.uuidString }
     private var pinned: Bool { store.pinnedAccountID == account.id.uuidString }
     private var availability: AccountAvailability { store.availability(account) }
@@ -35,8 +36,13 @@ struct MenuAccountRow: View {
                 } else {
                     Text(account.detail ?? account.provider.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         .help(account.detail ?? account.provider.subtitle)
-                    AccountStatusLabel(status: availability.status, compact: true)
-                        .help(store.errors[account.id] ?? availability.status.title)
+                    if store.connectionIssues[account.id] == .keychainAccess {
+                        Label("Keychain permission needed", systemImage: "lock")
+                            .font(.caption).foregroundStyle(.orange)
+                    } else {
+                        AccountStatusLabel(status: availability.status, compact: true)
+                            .help(store.errors[account.id] ?? availability.status.title)
+                    }
                 }
             }
             Spacer(minLength: 0)
@@ -60,6 +66,10 @@ struct MenuAccountRow: View {
                 Button(pinned ? "Unpin from Menu Bar" : "Pin in Menu Bar") {
                     store.pinAccount(pinned ? "" : account.id.uuidString)
                 }.disabled(store.presentationMode)
+                if store.connectionIssues[account.id] == .keychainAccess {
+                    Button("Allow Keychain access…", action: allowKeychainAccess)
+                        .disabled(store.presentationMode || store.refreshing.contains(account.id))
+                }
                 Button("Refresh") { Task { await store.refresh(account.id) } }.disabled(store.refreshing.contains(account.id))
                 Button("Reconnect…", action: reconnect).disabled(store.presentationMode)
             } label: { Image(systemName: "ellipsis").frame(width: 18, height: 28) }

@@ -1,7 +1,7 @@
 import Foundation
 
 public enum ConnectionIssue: String, Sendable {
-    case expired, denied, rateLimited, failed
+    case expired, denied, rateLimited, failed, keychainAccess
     public static func classify(_ error: Error) -> Self {
         switch error as? QuotaError {
         case .unauthorized: return .expired
@@ -16,6 +16,7 @@ public enum ConnectionIssue: String, Sendable {
         case .denied: return "Access denied · reconnect"
         case .rateLimited: return "Provider cooldown"
         case .failed: return "Refresh failed"
+        case .keychainAccess: return "Keychain permission needed"
         }
     }
     public var needsReconnect: Bool { self == .expired || self == .denied }

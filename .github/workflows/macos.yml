@@ -70,6 +70,9 @@ jobs:
             dist/startup.log
             dist/startup-sample.txt
           if-no-files-found: warn
+      - name: Verify silent polling against a locked disposable Keychain
+        timeout-minutes: 1
+        run: dist/QuotaBar.app/Contents/MacOS/QuotaBar --verify-keychain
       - name: Verify native account switching with synthetic sessions
         run: dist/QuotaBar.app/Contents/MacOS/QuotaBar --verify-client-switching
       - name: Render native appearance previews

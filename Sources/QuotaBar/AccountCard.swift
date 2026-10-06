@@ -18,6 +18,8 @@ struct AccountCard: View {
     let useAccount: () -> Void
     let selectedForClient: Bool
     var compact = false
+    var keychainAccessRequired = false
+    var allowKeychainAccess: () -> Void = {}
     var body: some View {
         Group {
         if presentationMode {
@@ -67,7 +69,8 @@ struct AccountCard: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
-                    Button("Reconnect account", action: reconnect).font(.caption)
+                    Button(keychainAccessRequired ? "Allow Keychain access…" : "Reconnect account",
+                           action: keychainAccessRequired ? allowKeychainAccess : reconnect).disabled(refreshing).font(.caption)
                 }
             }
             Spacer(minLength: 0)
@@ -91,7 +94,7 @@ struct AccountCard: View {
     private var compactContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 24) {
+                HStack(alignment: .top, spacing: 20) {
                     header.frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
                     compactMeters.fixedSize(horizontal: true, vertical: false)
                 }
@@ -114,18 +117,19 @@ struct AccountCard: View {
             if let snapshot = account.snapshot { usageDetails(snapshot) }
             if let error {
                 Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
-                Button("Reconnect account", action: reconnect).font(.caption)
+                Button(keychainAccessRequired ? "Allow Keychain access…" : "Reconnect account",
+                           action: keychainAccessRequired ? allowKeychainAccess : reconnect).disabled(refreshing).font(.caption)
             }
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
             .modifier(AccountSurface(selected: selectedForClient))
             .accessibilityElement(children: .contain)
     }
     private var compactMeters: some View {
-        HStack(alignment: .top, spacing: 20) {
+        HStack(alignment: .top, spacing: 16) {
             if account.snapshot != nil {
                 ForEach(mainWindows) { window in
                     UsageMeter(window: window, tint: account.provider.tint, showRemaining: showRemaining, compact: true)
-                        .frame(width: 130, alignment: .leading)
+                        .frame(width: 120, alignment: .leading)
                 }
             } else {
                 Text(refreshing ? "Reading subscription usage…" : "No usage reading yet")
@@ -167,6 +171,9 @@ struct AccountCard: View {
                 Button("Use this account…", action: useAccount).disabled(refreshing)
                 Button("History & export…", action: history)
                 Divider()
+                if keychainAccessRequired {
+                    Button("Allow Keychain access…", action: allowKeychainAccess).disabled(refreshing)
+                }
                 Button("Refresh", action: refresh).disabled(refreshing)
                 Button("Reconnect…", action: reconnect)
                 Button("Rename…", action: rename)

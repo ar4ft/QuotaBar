@@ -57,7 +57,8 @@ struct MenuBarView: View {
                                 ForEach(accounts.filter { $0.provider == provider }) { account in
                                     MenuAccountRow(account: account,
                                         useAccount: { dashboard(); store.requestSwitch(account) },
-                                        reconnect: { dashboard(); store.connect(account) })
+                                        reconnect: { dashboard(); store.connect(account) },
+                                        allowKeychainAccess: { dashboard(); Task { await store.allowKeychainAccess(account.id) } })
                                         .environmentObject(store)
                                 }
                             }

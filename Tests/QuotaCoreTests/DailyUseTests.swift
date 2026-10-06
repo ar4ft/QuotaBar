@@ -95,6 +95,13 @@ final class ConnectionHealthTests: XCTestCase {
         XCTAssertTrue(ConnectionHealth.make(snapshot: nil, issue: .expired).needsReconnect)
         XCTAssertFalse(ConnectionHealth.make(snapshot: nil, issue: .rateLimited).needsReconnect)
     }
+    func testKeychainPermissionFailureKeepsLastReadingAndDoesNotRequireReconnect() {
+        let reading = UsageSnapshot(windows: [], fetchedAt: Date(timeIntervalSince1970: 100))
+        let health = ConnectionHealth.make(snapshot: reading, issue: .keychainAccess)
+        XCTAssertTrue(health.needsAttention)
+        XCTAssertFalse(health.needsReconnect)
+        XCTAssertEqual(health.lastSuccess, reading.fetchedAt)
+    }
     func testExhaustedAllowanceIsStillAHealthyConnection() {
         let now = Date(timeIntervalSince1970: 100)
         let snapshot = UsageSnapshot(windows: [UsageWindow(id: "main", title: "Session", usedPercent: 100, resetsAt: nil)], fetchedAt: now)

@@ -5,26 +5,32 @@ import QuotaCore
 
 struct KeychainVault {
     private let service = "com.quotabar.accounts"
-    func save(_ credential: Credential, id: UUID) throws {
-        let data = try JSONEncoder().encode(credential)
-        let query = query(id)
-        let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        if status == errSecItemNotFound {
-            var item = query; item[kSecValueData as String] = data
-            item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-            try check(SecItemAdd(item as CFDictionary, nil))
-        } else { try check(status) }
+    func save(_ credential: Credential, id: UUID, allowAuthenticationUI: Bool = false) throws {
+        try KeychainInteraction.perform(allowUI: allowAuthenticationUI) {
+            let data = try JSONEncoder().encode(credential)
+            let query = query(id)
+            let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+            if status == errSecItemNotFound {
+                var item = query; item[kSecValueData as String] = data
+                item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+                try check(SecItemAdd(item as CFDictionary, nil))
+            } else { try check(status) }
+        }
     }
-    func load(id: UUID) throws -> Credential {
-        var query = query(id); query[kSecReturnData as String] = true; query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var result: CFTypeRef?
-        try check(SecItemCopyMatching(query as CFDictionary, &result))
-        guard let data = result as? Data else { throw QuotaError.invalidCredentials }
-        return try JSONDecoder().decode(Credential.self, from: data)
+    func load(id: UUID, allowAuthenticationUI: Bool = false) throws -> Credential {
+        try KeychainInteraction.perform(allowUI: allowAuthenticationUI) {
+            var query = query(id); query[kSecReturnData as String] = true; query[kSecMatchLimit as String] = kSecMatchLimitOne
+            var result: CFTypeRef?
+            try check(SecItemCopyMatching(query as CFDictionary, &result))
+            guard let data = result as? Data else { throw QuotaError.invalidCredentials }
+            return try JSONDecoder().decode(Credential.self, from: data)
+        }
     }
-    func remove(id: UUID) throws {
-        let status = SecItemDelete(query(id) as CFDictionary)
-        if status != errSecItemNotFound { try check(status) }
+    func remove(id: UUID, allowAuthenticationUI: Bool = false) throws {
+        try KeychainInteraction.perform(allowUI: allowAuthenticationUI) {
+            let status = SecItemDelete(query(id) as CFDictionary)
+            if status != errSecItemNotFound { try check(status) }
+        }
     }
     private func query(_ id: UUID) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: id.uuidString]

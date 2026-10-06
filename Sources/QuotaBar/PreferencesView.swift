@@ -21,12 +21,13 @@ struct PreferencesView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.all)) {
             List(SettingsTab.allCases, selection: selection) { tab in
-                Label(tab.title, systemImage: tab.symbol).tag(tab)
+                Label(tab.title, systemImage: tab.symbol).foregroundStyle(.primary).tag(tab)
             }
             .listStyle(.sidebar)
             .softScrollEdges()
             .navigationTitle("Settings")
-            .navigationSplitViewColumnWidth(min: 170, ideal: 180, max: 220)
+            .frame(width: 180)
+            .navigationSplitViewColumnWidth(min: 180, ideal: 180, max: 180)
             .toolbar(removing: .sidebarToggle)
             .safeAreaInset(edge: .bottom) {
                 VStack(alignment: .leading, spacing: 4) {

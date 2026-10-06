@@ -160,7 +160,9 @@ struct DashboardView: View {
                     history: { historyAccount = account },
                     refresh: { Task { await store.refresh(account.id) } }, reconnect: { store.connect(account) },
                     rename: { newName = account.name; renameAccount = account }, remove: { deleting = account },
-                    useAccount: { store.requestSwitch(account) }, selectedForClient: store.activeAccountID(account.provider) == account.id.uuidString, compact: compact)
+                    useAccount: { store.requestSwitch(account) }, selectedForClient: store.activeAccountID(account.provider) == account.id.uuidString, compact: compact,
+                    keychainAccessRequired: store.connectionIssues[account.id] == .keychainAccess,
+                    allowKeychainAccess: { Task { await store.allowKeychainAccess(account.id) } })
     }
     private func count(_ item: AccountFilter) -> Int {
         store.accounts.filter { item == .all || $0.provider.rawValue == item.rawValue }.count
