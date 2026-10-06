@@ -31,7 +31,11 @@ public final class EphemeralTransport: HTTPTransport, @unchecked Sendable {
 
 public struct UsageClient: Sendable {
     private let transport: any HTTPTransport
-    public init(transport: any HTTPTransport = EphemeralTransport()) { self.transport = transport }
+    private let diagnostics: (@Sendable (UsageRequestDiagnostic) async -> Void)?
+    public init(transport: any HTTPTransport = EphemeralTransport(),
+                diagnostics: (@Sendable (UsageRequestDiagnostic) async -> Void)? = nil) {
+        self.transport = transport; self.diagnostics = diagnostics
+    }
 
     public func fetch(_ credential: Credential) async throws -> UsageSnapshot {
         var credential = credential
@@ -46,7 +50,9 @@ public struct UsageClient: Sendable {
             guard let id = credential.accountID, UUID(uuidString: id) != nil else { throw QuotaError.invalidCredentials }
             url = URL(string: "https://claude.ai/api/organizations/\(id)/usage")!
         }
-        let data = try await checked(request(url, credential: credential))
+        let endpoint: UsageRequestDiagnostic.Endpoint = credential.kind == .codex ? .codexUsage :
+            credential.kind == .claudeOAuth ? .claudeOAuthUsage : .claudeWebUsage
+        let data = try await checked(request(url, credential: credential), endpoint: endpoint)
         return try UsageParser.parse(data, provider: credential.kind == .codex ? .openAI : .claude)
     }
 
@@ -55,11 +61,11 @@ public struct UsageClient: Sendable {
         guard credential.kind == .codex else { throw QuotaError.invalidCredentials }
         var request = request(URL(string: "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits")!, credential: credential)
         request.timeoutInterval = 5
-        return try UsageParser.parseResetCredits(await checked(request))
+        return try UsageParser.parseResetCredits(await checked(request, endpoint: .codexResetCredits))
     }
 
     public func organizations(_ credential: Credential) async throws -> [Organization] {
-        let data = try await checked(request(URL(string: "https://claude.ai/api/organizations")!, credential: credential))
+        let data = try await checked(request(URL(string: "https://claude.ai/api/organizations")!, credential: credential), endpoint: .claudeOrganizations)
         guard let orgs = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { throw QuotaError.malformedResponse }
         guard !orgs.isEmpty else { throw QuotaError.noOrganizations }
         return try orgs.map { raw in
@@ -85,7 +91,7 @@ public struct UsageClient: Sendable {
             "client_id": "app_EMoamEEZ73f0CkXaXp7hrann", "grant_type": "refresh_token",
             "refresh_token": refreshToken, "scope": "openid profile email"
         ])
-        let data = try await checked(request)
+        let data = try await checked(request, endpoint: .codexTokenRenewal)
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let token = json["access_token"] as? String, !token.isEmpty else { throw QuotaError.malformedResponse }
         return try ClientSession.updatingCodex(credential, response: json)
@@ -108,8 +114,15 @@ public struct UsageClient: Sendable {
         }
         return request
     }
-    private func checked(_ request: URLRequest) async throws -> Data {
-        let (data, response) = try await transport.send(request)
+    private func checked(_ request: URLRequest, endpoint: UsageRequestDiagnostic.Endpoint) async throws -> Data {
+        let data: Data
+        let response: HTTPURLResponse
+        do { (data, response) = try await transport.send(request) }
+        catch {
+            await diagnostics?(UsageRequestDiagnostic(endpoint: endpoint, result: DiagnosticFailure(error)))
+            throw error
+        }
+        await diagnostics?(UsageRequestDiagnostic(endpoint: endpoint, result: .http(response.statusCode)))
         switch response.statusCode {
         case 200: guard data.count <= 2_097_152 else { throw QuotaError.malformedResponse }; return data
         case 401: throw QuotaError.unauthorized

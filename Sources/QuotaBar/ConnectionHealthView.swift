@@ -1,5 +1,6 @@
 #if os(macOS)
 import SwiftUI
+import AppKit
 import QuotaCore
 
 struct ConnectionHealthView: View {
@@ -12,7 +13,14 @@ struct ConnectionHealthView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 Text("Connection health").font(.title2.bold()).accessibilityAddTraits(.isHeader)
-                Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+                Spacer()
+                if !store.presentationMode && !store.refreshDiagnostics.isEmpty {
+                    Button("Copy diagnostics", systemImage: "doc.on.doc") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(store.diagnosticReport, forType: .string)
+                    }.help("Copy refresh steps and response codes, without credentials or account names")
+                }
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }
             if store.presentationMode {
                 ContentUnavailableView("Account details hidden", systemImage: "eye.slash",
@@ -46,6 +54,18 @@ struct ConnectionHealthView: View {
                                     Text("Retry after " + retry.formatted(date: .omitted, time: .shortened)).font(.caption)
                                 }
                                 if let error = store.errors[account.id] { Text(error).font(.caption).foregroundStyle(.secondary) }
+                                if let diagnostic = store.refreshDiagnostics[account.id] {
+                                    if diagnostic.failure == .http(401), diagnostic.credential?.renewal == .readOnly {
+                                        Text("This import is a read-only copy. Renew the sign-in in its original app, then reconnect with the updated file. Signing in inside QuotaBar enables automatic OpenAI renewal.")
+                                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                                    }
+                                    DisclosureGroup("Refresh diagnostics") {
+                                        Text(diagnostic.report(accountID: account.id, provider: account.provider))
+                                            .font(.system(.caption, design: .monospaced))
+                                            .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                                            .padding(.top, 6)
+                                    }.font(.caption)
+                                }
                             }
                             Divider()
                         }

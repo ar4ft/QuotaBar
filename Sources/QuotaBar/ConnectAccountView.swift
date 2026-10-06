@@ -110,6 +110,8 @@ struct ConnectAccountView: View {
             }
             Text("The file picker shows hidden files and folders.")
                 .font(.caption).foregroundStyle(.secondary)
+            Text("Import saves a read-only copy. Renewing a sign-in in another app does not update this copy. Reimport after renewal, or sign in inside QuotaBar for automatic OpenAI renewal.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if saving { ProgressView("Saving account…").controlSize(.small) }
             if let message = error ?? login.error {
                 Text(message).font(.callout).foregroundStyle(.red).textSelection(.enabled)

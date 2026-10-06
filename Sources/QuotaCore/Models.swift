@@ -103,7 +103,7 @@ public enum QuotaError: LocalizedError, Equatable {
         switch self {
         case .invalidCredentials: return "No subscription credentials found. API keys cannot report subscription usage."
         case .malformedResponse: return "The provider returned an unrecognized usage response."
-        case .unauthorized: return "Your session expired. Reconnect this account."
+        case .unauthorized: return "The provider rejected this session (HTTP 401). Reconnect this account."
         case .forbidden: return "The provider denied access. Try reconnecting or importing OAuth credentials."
         case .rateLimited(let date): return "Too many requests. Try again after \(date.formatted(date: .omitted, time: .shortened))."
         case .http(let status): return "The provider returned HTTP \(status). Try again later."
