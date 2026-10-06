@@ -15,7 +15,9 @@ struct MenuBarView: View {
         }
     }
     private var providers: [Provider] { Provider.allCases.filter { provider in accounts.contains { $0.provider == provider } } }
-    private var listHeight: CGFloat { min(420, CGFloat(accounts.count) * 76 + CGFloat(providers.count) * 32 + 16) }
+    private var listHeight: CGFloat {
+        min(420, CGFloat(accounts.count) * (store.presentationMode ? 54 : 66) + CGFloat(providers.count) * 28 + 16)
+    }
     var body: some View {
         VStack(spacing: 0) {
             header

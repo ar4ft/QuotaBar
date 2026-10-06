@@ -78,6 +78,7 @@ struct AccountCard: View {
                     Button("Reconnect account", action: reconnect).font(.caption)
                 }
             }
+            Spacer(minLength: 0)
             Divider()
             HStack(spacing: 8) {
                 freshness
@@ -91,7 +92,7 @@ struct AccountCard: View {
                     .help(selectedForClient ? "Reapply this account if the CLI sign-in changed" : "Use this account in the CLI")
                     .accessibilityLabel(selectedForClient ? "Reapply \(account.name) in the CLI" : "Use \(account.name) in the CLI")
             }.controlSize(.small)
-        }.padding(AppStyle.cardPadding).frame(maxWidth: .infinity, alignment: .leading)
+        }.padding(AppStyle.cardPadding).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .modifier(AccountSurface(selected: selectedForClient))
             .accessibilityElement(children: .contain)
     }
@@ -136,6 +137,7 @@ struct AccountCard: View {
             TimelineView(.periodic(from: .now, by: 60)) { _ in
                 HStack(spacing: 4) {
                     Image(systemName: snapshot.isStale || error != nil ? "clock" : "checkmark.circle").accessibilityHidden(true)
+                    Text(snapshot.isStale || error != nil ? "Last reading" : "Updated")
                     Text(snapshot.fetchedAt, style: .relative).lineLimit(1)
                 }.font(.caption).foregroundStyle(.secondary)
                     .help("Last reading: " + snapshot.fetchedAt.formatted(date: .abbreviated, time: .shortened))

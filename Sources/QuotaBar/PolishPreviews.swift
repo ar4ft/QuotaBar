@@ -87,6 +87,7 @@ struct PolishPreviews {
         window.appearance = NSAppearance(named: appearance)
         window.isReleasedWhenClosed = false
         let hosting = NSHostingView(rootView: view.environment(\.colorScheme, dark ? .dark : .light)
+            .environment(\.colorSchemeContrast, contrast ? .increased : .standard)
             .background(Color(nsColor: .windowBackgroundColor)))
         hosting.frame = NSRect(origin: .zero, size: size)
         window.contentView = hosting
@@ -103,7 +104,7 @@ struct PolishPreviews {
             "appearance": appearance.rawValue,
             "requestedHighContrastAppearance": contrast,
             "systemIncreaseContrast": NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast,
-            "note": "Appearance preview only; a false systemIncreaseContrast does not exercise the full system accessibility setting."
+            "note": "Native appearance and SwiftUI contrast preview; a false systemIncreaseContrast does not exercise the full system accessibility setting."
         ]
         let data = try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: directory.appendingPathComponent(name + ".json"))
