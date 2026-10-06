@@ -11,6 +11,7 @@ struct ConnectAccountView: View {
     @State private var provider: Provider
     @State private var name: String
     @State private var executable = ""
+    @State private var authFilePath = ""
     @State private var organization = ""
     @State private var organizations: [Organization] = []
     @State private var pendingCredential: Credential?
@@ -37,7 +38,7 @@ struct ConnectAccountView: View {
             }
             Picker("Provider", selection: $provider) {
                 ForEach(Provider.allCases) { Text($0.title).tag($0) }
-            }.pickerStyle(.segmented).disabled(request.account != nil || login.running || saving)
+            }.pickerStyle(.segmented).disabled(request.account != nil || login.running || importing || saving)
             TextField("Account name", text: $name, prompt: Text("Personal or Work")).textFieldStyle(.roundedBorder)
             if provider == .openAI {
                 Text("Sign in with OpenAI").font(.headline)
@@ -87,11 +88,28 @@ struct ConnectAccountView: View {
             }.disabled(login.running || saving)
             Text("Sign in with \(provider == .openAI ? "Codex" : "Claude Code"), close its sessions, then save the current sign-in here. This retains the complete client session for account switching; macOS may ask for Keychain access.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if provider == .openAI {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Auth file path").font(.headline)
+                    HStack {
+                        TextField("Auth file path", text: $authFilePath, prompt: Text("~/.codex/auth.json"))
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit { importAuthFilePath() }
+                            .disabled(login.running || importing || saving)
+                        Button("Import path") { importAuthFilePath() }
+                            .disabled(authFilePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || login.running || importing || saving)
+                    }
+                    Text("Enter the full path to auth.json. Paths starting with ~/ work, including hidden folders such as .codex.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
             HStack {
-                Button("Import credentials…") { importing = true }.disabled(login.running || saving)
+                Button("Import credentials…") { browseCredentials() }.disabled(login.running || importing || saving)
                 Text(provider == .openAI ? "Select Codex auth.json" : "Select Claude Code .credentials.json")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Text("The file picker shows hidden files and folders.")
+                .font(.caption).foregroundStyle(.secondary)
             if saving { ProgressView("Saving account…").controlSize(.small) }
             if let message = error ?? login.error {
                 Text(message).font(.callout).foregroundStyle(.red).textSelection(.enabled)
@@ -100,16 +118,6 @@ struct ConnectAccountView: View {
         }
         .padding(AppStyle.pagePadding)
         }.frame(minWidth: 520, idealWidth: 600, minHeight: 480, idealHeight: 640)
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.json, .data]) { result in
-            do {
-                let url = try result.get()
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-                guard ((attributes[.size] as? NSNumber)?.intValue ?? Int.max) <= 1_048_576 else { throw QuotaError.invalidCredentials }
-                save(try CredentialParser.parse(Data(contentsOf: url), provider: provider))
-            } catch { self.error = error.localizedDescription }
-        }
         .sheet(isPresented: $showBrowser) {
             VStack(spacing: 0) {
                 HStack {
@@ -121,6 +129,56 @@ struct ConnectAccountView: View {
         }
         .onDisappear { login.cancel() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in login.cancel() }
+    }
+    private func importAuthFilePath() {
+        guard provider == .openAI, !login.running, !importing, !saving else { return }
+        let path = (authFilePath.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
+        guard !path.isEmpty else { return }
+        guard (path as NSString).isAbsolutePath else {
+            error = "Enter a full file path, such as ~/.codex/auth.json or /Users/yourname/.codex/auth.json."
+            return
+        }
+        importCredentials(at: URL(fileURLWithPath: path))
+    }
+    private func browseCredentials() {
+        guard !login.running, !importing, !saving else { return }
+        let panel = NSOpenPanel()
+        panel.title = "Import credentials"
+        panel.prompt = "Import"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.json, .data]
+        panel.showsHiddenFiles = true
+        if provider == .openAI {
+            let path = (authFilePath.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
+            panel.directoryURL = (path as NSString).isAbsolutePath
+                ? URL(fileURLWithPath: path).deletingLastPathComponent()
+                : FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex", isDirectory: true)
+        }
+        importing = true
+        let completion: @MainActor @Sendable (NSApplication.ModalResponse) -> Void = { response in
+            importing = false
+            guard response == .OK, let url = panel.url else { return }
+            if provider == .openAI { authFilePath = url.path }
+            importCredentials(at: url)
+        }
+        if let window = NSApp.keyWindow {
+            panel.beginSheetModal(for: window, completionHandler: completion)
+        } else {
+            panel.begin(completionHandler: completion)
+        }
+    }
+    private func importCredentials(at url: URL) {
+        guard !login.running, !saving else { return }
+        error = nil
+        do {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            guard ((attributes[.size] as? NSNumber)?.intValue ?? Int.max) <= 1_048_576 else { throw QuotaError.invalidCredentials }
+            save(try CredentialParser.parse(Data(contentsOf: url), provider: provider))
+        } catch { self.error = error.localizedDescription }
     }
     private func save(_ credential: Credential) {
         guard !saving else { return }

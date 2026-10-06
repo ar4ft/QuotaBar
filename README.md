@@ -89,7 +89,7 @@ Each login uses its own folder under `~/Library/Application Support/QuotaBar`. A
 
 For these app-owned sessions, an expired access token triggers one refresh via Codex's OAuth token endpoint. Rotated tokens are saved to Keychain before another usage request. Imported sessions retain their complete authentication payload in Keychain for switching, but never grant QuotaBar refresh ownership. Once an app-owned sign-in is handed off to a client, QuotaBar also stops rotating that session's refresh token. Reconnect or let the client renew it when needed.
 
-**Import credentials** lets you select an existing Codex `auth.json` instead. Press Cmd-Shift-G in the file chooser to reach hidden folders such as `~/.codex`.
+To import an existing Codex `auth.json`, enter its full path in **Auth file path** (for example, `~/.codex/auth.json`) and click **Import path** or press Return. Paths starting with `~/` expand to your home folder. **Import credentials…** also opens a file picker with hidden files and folders visible, starting in `~/.codex` or the folder of the entered path.
 
 ## Connect Claude
 
