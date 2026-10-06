@@ -8,6 +8,7 @@ struct QuotaBarApp: App {
     @State private var shortcut = GlobalShortcut()
     @StateObject private var updater = AppUpdater()
     init() {
+        StartupDiagnostics.record("App initializer started")
         if CommandLine.arguments.contains("--verify-client-switching") {
             do { try ClientSwitchChecks.run(); exit(0) }
             catch { fputs("Native client-switch checks failed: \(error.localizedDescription)\n", stderr); exit(1) }
@@ -17,11 +18,17 @@ struct QuotaBarApp: App {
             do { try PolishPreviews.render(to: URL(fileURLWithPath: path, isDirectory: true)); exit(0) }
             catch { fputs("Could not render previews: \(error.localizedDescription)\n", stderr); exit(1) }
         }
+        StartupDiagnostics.record("App initializer finished")
     }
     var body: some Scene {
         Window("QuotaBar", id: "dashboard") {
             DashboardView().environmentObject(store)
-                .task { store.start(); updater.start() }
+                .background(ShortcutBridge().environmentObject(store).environment(shortcut))
+                .task {
+                    StartupDiagnostics.record("Dashboard appeared")
+                    store.start(); updater.start()
+                    await StartupDiagnostics.verifyResponsivenessIfRequested()
+                }
         }.defaultSize(width: 1080, height: 740)
         .windowStyle(.automatic)
         .commands {
@@ -34,12 +41,16 @@ struct QuotaBarApp: App {
             }
         }
         MenuBarExtra {
-            MenuBarView().environmentObject(store).environmentObject(updater).task { store.start(); updater.start() }
+            MenuBarView().environmentObject(store).environmentObject(updater)
+                .background(ShortcutBridge().environmentObject(store).environment(shortcut)).task { store.start(); updater.start() }
         } label: {
-            MenuBarLabel().environmentObject(store).task { store.start(); updater.start() }
-                .background(ShortcutBridge().environmentObject(store).environment(shortcut))
+            // Keep the status-item label free of task/onAppear/background side effects.
+            MenuBarLabel().environmentObject(store)
         }.menuBarExtraStyle(.window)
-        Settings { PreferencesView().environmentObject(store).environment(shortcut).environmentObject(updater) }
+        Settings {
+            PreferencesView().environmentObject(store).environment(shortcut).environmentObject(updater)
+                .background(ShortcutBridge().environmentObject(store).environment(shortcut))
+        }
             .windowResizability(.contentSize)
     }
 }

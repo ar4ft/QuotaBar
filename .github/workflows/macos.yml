@@ -7,7 +7,17 @@ permissions:
   contents: read
 jobs:
   verify:
-    runs-on: macos-15-intel
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            app_artifact: QuotaBar-macOS
+            preview_artifact: QuotaBar-UI-Previews
+          - runner: macos-15-intel
+            app_artifact: QuotaBar-macOS-Intel
+            preview_artifact: QuotaBar-UI-Previews-Intel
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - name: Select Swift 6.2 toolchain
@@ -48,13 +58,18 @@ jobs:
             exit 1
           fi
           otool -L dist/QuotaBar.app/Contents/MacOS/QuotaBar
-          dist/QuotaBar.app/Contents/MacOS/QuotaBar &
-          app_process=$!
-          sleep 3
-          kill -0 "$app_process"
-          kill "$app_process"
-          wait "$app_process" || true
           unzip -tq dist/QuotaBar-macOS.zip
+      - name: Verify startup and main-thread responsiveness
+        run: ./scripts/verify-startup.sh
+      - name: Publish startup diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuotaBar-startup-${{ matrix.runner }}
+          path: |
+            dist/startup.log
+            dist/startup-sample.txt
+          if-no-files-found: warn
       - name: Verify native account switching with synthetic sessions
         run: dist/QuotaBar.app/Contents/MacOS/QuotaBar --verify-client-switching
       - name: Render native appearance previews
@@ -69,7 +84,7 @@ jobs:
       - name: Publish UI previews
         uses: actions/upload-artifact@v4
         with:
-          name: QuotaBar-UI-Previews
+          name: ${{ matrix.preview_artifact }}
           path: |
             dist/previews/*.png
             dist/previews/*.json
@@ -78,7 +93,7 @@ jobs:
       - name: Publish macOS app artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QuotaBar-macOS
+          name: ${{ matrix.app_artifact }}
           path: |
             dist/QuotaBar-macOS.zip
             dist/QuotaBar-macOS.dmg
@@ -120,7 +135,7 @@ jobs:
           cat > "$RUNNER_TEMP/development-release.md" <<EOF
           Unsigned development build of QuotaBar ${app_version}, for macOS 14 or newer (Apple Silicon and Intel).
 
-          Built from commit ${GITHUB_SHA} after tests, universal packaging, application launch, and synthetic account-switching checks passed.
+          Built from commit ${GITHUB_SHA} after tests, universal packaging, main-thread startup responsiveness on Apple Silicon and Intel, and synthetic account-switching checks passed.
 
           Download the ZIP or DMG below. These installers have no Developer ID signing or Apple notarization, and do not enable automatic updates. Signed releases are created only through the manually dispatched signed-release workflow.
 

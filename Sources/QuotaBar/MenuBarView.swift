@@ -93,22 +93,24 @@ struct MenuBarView: View {
 struct MenuBarLabel: View {
     @EnvironmentObject private var store: AccountStore
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 15)) { context in
-            HStack(spacing: 5) {
-                Image(systemName: "chart.bar.xaxis").accessibilityHidden(true)
-                if !store.presentationMode, let account = store.pinnedAccount {
-                    let reading = MenuBarReading.make(snapshot: account.snapshot,
-                        mode: MenuBarDisplay(rawValue: store.menuBarDisplayRaw) ?? .allowance, windowID: store.pinnedWindowID,
-                        hasError: store.errors[account.id] != nil, now: context.date)
-                    if let text = reading.text { Text(text).monospacedDigit() }
-                }
-                if !store.refreshing.isEmpty { Text("↻") }
+        // MenuBarExtra converts this label into native status-item content.
+        // A TimelineView here can repeatedly invalidate the status item on macOS 15.5.
+        // The shared store already advances its clock every fifteen seconds.
+        let now = store.clock
+        HStack(spacing: 5) {
+            Image(systemName: "chart.bar.xaxis").accessibilityHidden(true)
+            if !store.presentationMode, let account = store.pinnedAccount {
+                let reading = MenuBarReading.make(snapshot: account.snapshot,
+                    mode: MenuBarDisplay(rawValue: store.menuBarDisplayRaw) ?? .allowance, windowID: store.pinnedWindowID,
+                    hasError: store.errors[account.id] != nil, now: now)
+                if let text = reading.text { Text(text).monospacedDigit() }
             }
-            .help(help(now: context.date))
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("QuotaBar")
-            .accessibilityValue(help(now: context.date))
+            if !store.refreshing.isEmpty { Text("↻") }
         }
+        .help(help(now: now))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("QuotaBar")
+        .accessibilityValue(help(now: now))
     }
     private func help(now: Date) -> String {
         if store.presentationMode { return "QuotaBar · presentation mode · details hidden" }
