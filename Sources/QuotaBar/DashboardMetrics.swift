@@ -36,7 +36,7 @@ struct DashboardMetrics: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Next reset").font(.callout).foregroundStyle(.secondary)
             Text(presentationMode ? "—" : reset.map { countdown($0.date, now: now) } ?? "—")
-                .font(.largeTitle.bold()).monospacedDigit().tracking(-0.8)
+                .font(.title.weight(.semibold)).monospacedDigit().tracking(-0.5)
             Text(presentationMode ? "Reset details hidden" : reset?.detail ?? "No upcoming reset reported")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }.accessibilityElement(children: .combine)
@@ -46,12 +46,12 @@ struct DashboardMetrics: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Connected").font(.callout).foregroundStyle(.secondary)
                 Text(accounts.count.formatted()).font(.title3.bold()).monospacedDigit()
-                Text("subscription accounts").font(.caption).foregroundStyle(.secondary)
+                Text("accounts").font(.caption).foregroundStyle(.secondary)
             }.accessibilityElement(children: .combine)
             VStack(alignment: .leading, spacing: 6) {
                 Text("With allowance").font(.callout).foregroundStyle(.secondary)
                 Text(presentationMode ? "—" : available.formatted()).font(.title3.bold()).monospacedDigit()
-                Text("including running low").font(.caption).foregroundStyle(.secondary)
+                Text("ready or running low").font(.caption).foregroundStyle(.secondary)
             }.accessibilityElement(children: .combine)
         }.fixedSize(horizontal: true, vertical: false)
     }

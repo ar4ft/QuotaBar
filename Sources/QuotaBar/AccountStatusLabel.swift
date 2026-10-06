@@ -4,6 +4,7 @@ import QuotaCore
 
 struct AccountStatusLabel: View {
     let status: AvailabilityStatus
+    var compact = false
     private var symbol: String {
         switch status {
         case .ready: return "checkmark.circle"
@@ -16,7 +17,7 @@ struct AccountStatusLabel: View {
         }
     }
     var body: some View {
-        Label(status.title, systemImage: symbol).font(.callout)
+        Label(status.title, systemImage: symbol).font(compact ? .caption : .callout)
             .foregroundStyle(color)
             .accessibilityLabel("Allowance status: " + status.title)
     }

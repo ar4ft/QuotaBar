@@ -267,3 +267,11 @@ To capture startup milestones, force-quit the frozen instance, then launch from 
 ```
 
 The same fixed milestone messages appear in Console under subsystem `com.quotabar.app`, category `Startup`; they contain no account details or credentials. If startup still hangs, Activity Monitor → QuotaBar → Sample Process captures the main-thread call graph. The CI startup check is `./scripts/verify-startup.sh` on a Mac after building the bundle.
+
+## Native product polish (0.10.0)
+
+Account cards place the main quota windows side by side, with credits, model-specific windows, and forecasts under **Usage details**. The surface, selection, and hover states use native colors and your Mac's accent color. Status text distinguishes low, stale, failed, and unconfirmed-reset readings. The menu bar uses compact provider-grouped account rows, confirmed main allowance, selection/pin markers, and per-account switching, refresh, reconnect, and pin actions. Search appears when more than six accounts are saved.
+
+Close the dashboard with the red window button or **Window → Keep Running in Menu Bar** (Command-Shift-W). Monitoring and alerts continue, and the Dock icon disappears. Reopen from **Open Dashboard** in the menu bar or the configured global shortcut. **Quit QuotaBar** (Command-Q) stops the app completely. The native CI startup check now verifies dashboard closing, background clock activity, and reopening, as well as main-thread responsiveness.
+
+Design guidance came from the requested [davepoon macOS design](https://github.com/davepoon/buildwithclaude/tree/main/plugins/all-skills/skills/macos-design), [ceorkm macOS design](https://github.com/ceorkm/macos-design-skill), [Apple design](https://github.com/emilkowalski/skills/tree/main/skills/apple-design), and [pinned b-open macOS design](https://github.com/b-open-io/prompts/tree/f4b302aadb0c99023b03e1f1b38ffed3697fbedf/modules/creative/.agents/skills/macos-design) skills. Their layout, visual, and interaction guidance was adapted to native SwiftUI; no web window chrome or fabricated successful account switches are used. Native previews additionally cover many accounts, privacy, and expired/stale/exhausted readings.

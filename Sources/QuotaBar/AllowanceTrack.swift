@@ -17,7 +17,7 @@ struct AllowanceTrack: View {
                         .frame(width: 2).offset(x: geometry.size.width * Double(quarter) / 4 - 1)
                 }
             }
-        }.frame(height: 8)
+        }.frame(height: 5)
     }
 }
 #endif

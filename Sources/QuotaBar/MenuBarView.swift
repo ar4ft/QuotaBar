@@ -7,87 +7,103 @@ struct MenuBarView: View {
     @EnvironmentObject private var store: AccountStore
     @EnvironmentObject private var updater: AppUpdater
     @Environment(\.openWindow) private var openWindow
+    @State private var search = ""
+    private var accounts: [Account] {
+        store.orderedAccounts.filter {
+            store.presentationMode || search.isEmpty || $0.name.localizedStandardContains(search) ||
+            ($0.detail?.localizedStandardContains(search) ?? false)
+        }
+    }
+    private var providers: [Provider] { Provider.allCases.filter { provider in accounts.contains { $0.provider == provider } } }
+    private var listHeight: CGFloat {
+        min(420, CGFloat(accounts.count) * (store.presentationMode ? 58 : 72) + CGFloat(providers.count) * 32 + 16)
+    }
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Label("QuotaBar", systemImage: "chart.bar.xaxis").font(.headline)
-                Spacer()
-                if !store.refreshing.isEmpty { ProgressView().controlSize(.small) }
-                else {
-                    Button { Task { await store.refreshAll() } } label: { Label("Refresh accounts", systemImage: "arrow.clockwise") }
-                        .buttonStyle(.borderless).labelStyle(.iconOnly).help("Refresh all accounts")
-                }
-            }.padding(16)
+            header
             Divider()
             if store.accounts.isEmpty {
                 VStack(spacing: 12) {
-                    Text("No connected accounts").foregroundStyle(.secondary)
+                    Image(systemName: "person.crop.circle.badge.plus").font(.title2).foregroundStyle(.secondary)
+                    Text("Your accounts, at a glance").font(.headline)
+                    Text("Connect OpenAI or Claude to get started.").font(.caption).foregroundStyle(.secondary)
                     Button("Add account") { dashboard(); store.connect() }.buttonStyle(.borderedProminent)
-                }.padding(30)
+                        .disabled(store.presentationMode)
+                }.frame(maxWidth: .infinity).padding(24)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(store.orderedAccounts) { account in
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Image(systemName: account.provider.symbol).foregroundStyle(.secondary).accessibilityHidden(true)
-                                    Text(store.presentationMode ? account.provider.title + " account" : account.name).font(.headline).lineLimit(1)
-                                    Spacer()
-                                    Button { dashboard(); store.requestSwitch(account) } label: {
-                                        Label("Use this account", systemImage: "arrow.left.arrow.right")
-                                    }.buttonStyle(.borderless).labelStyle(.iconOnly).help("Use this account in the CLI")
-                                        .disabled(store.presentationMode)
-                                        .accessibilityLabel(store.presentationMode ? "Use account" : "Use \(account.name) in \(account.provider == .openAI ? "Codex" : "Claude Code")")
-                                    Button {
-                                        store.pinAccount(store.pinnedAccountID == account.id.uuidString ? "" : account.id.uuidString)
-                                    } label: {
-                                        Image(systemName: store.pinnedAccountID == account.id.uuidString ? "pin.fill" : "pin")
-                                    }.buttonStyle(.borderless).help("Pin account allowance in menu bar")
-                                        .accessibilityLabel(store.pinnedAccountID == account.id.uuidString ? "Unpin account" : "Pin account")
-                                        .accessibilityValue(store.pinnedAccountID == account.id.uuidString ? "Pinned" : "Not pinned")
-                                    Button { dashboard(); store.connect(account) } label: { Label("Reconnect account", systemImage: "person.crop.circle.badge.checkmark") }
-                                        .buttonStyle(.borderless).labelStyle(.iconOnly).help("Reconnect account").disabled(store.presentationMode)
-                                }
-                                if store.presentationMode {
-                                    Text("Account details and balances hidden").font(.caption).foregroundStyle(.secondary)
-                                } else {
-                                    AccountStatusLabel(status: store.availability(account).status)
-                                    if store.activeAccountID(account.provider) == account.id.uuidString {
-                                        Label("Selected for CLI", systemImage: "person.crop.circle.badge.checkmark").font(.caption).foregroundStyle(.secondary)
-                                    }
-                                    if let snapshot = account.snapshot {
-                                        CreditSummary(snapshot: snapshot, provider: account.provider)
-                                        ForEach(snapshot.windows) { window in UsageMeter(window: window, tint: account.provider.tint, showRemaining: store.showRemaining) }
-                                        if snapshot.isStale || store.errors[account.id] != nil {
-                                            Text("Last reading · \(snapshot.fetchedAt.formatted(date: .omitted, time: .shortened))")
-                                                .font(.caption).foregroundStyle(.orange)
-                                        }
-                                    } else { Text("No usage reading yet").font(.caption).foregroundStyle(.secondary) }
-                                    if let error = store.errors[account.id] {
-                                        Text(error).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-                                    }
-                                }
-                            }.padding(16)
-                            Divider()
+                if store.accounts.count > 6 && !store.presentationMode {
+                    HStack(spacing: 6) {
+                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
+                        TextField("Find an account", text: $search).textFieldStyle(.plain)
+                        if !search.isEmpty {
+                            Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
+                                .buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("Clear account search")
                         }
-                    }
-                }.frame(maxHeight: 480)
+                    }.padding(10).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                        .padding(.horizontal, 12).padding(.top, 12)
+                }
+                if accounts.isEmpty {
+                    Text("No matching accounts").font(.callout).foregroundStyle(.secondary).padding(24)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            ForEach(providers) { provider in
+                                HStack {
+                                    Text(provider.title).font(.caption.weight(.semibold))
+                                    Spacer()
+                                    Text(accounts.count { $0.provider == provider }.formatted()).font(.caption).monospacedDigit()
+                                }.foregroundStyle(.secondary).padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 2)
+                                ForEach(accounts.filter { $0.provider == provider }) { account in
+                                    MenuAccountRow(account: account,
+                                        useAccount: { dashboard(); store.requestSwitch(account) },
+                                        reconnect: { dashboard(); store.connect(account) })
+                                        .environmentObject(store)
+                                }
+                            }
+                        }.padding(8)
+                    }.frame(height: listHeight)
+                }
             }
-            HStack {
-                Button("Open dashboard", action: dashboard)
+            Divider()
+            HStack(spacing: 12) {
+                Button("Open Dashboard", action: dashboard).buttonStyle(.borderless)
                 Spacer()
+                SettingsLink { Image(systemName: "gearshape") }
+                    .buttonStyle(.borderless).help("Settings").accessibilityLabel("Settings")
                 Menu {
+                    Button("Keep Running in Menu Bar") { DashboardWindowController.keepRunningInMenuBar() }
+                    Divider()
                     Button("Connection health…") { dashboard(); store.showConnectionHealth = true }
                     Toggle("Presentation mode", isOn: $store.presentationMode)
                     Button("Check for Updates…") { updater.check() }.disabled(!updater.canCheck)
-                    SettingsLink { Text("Settings…") }
-                    Button("Quit QuotaBar") { NSApplication.shared.terminate(nil) }
-                } label: { Label("Settings and actions", systemImage: "gearshape") }.menuStyle(.borderlessButton).fixedSize().labelStyle(.iconOnly).accessibilityLabel("Settings and actions")
-            }.padding(14)
-        }.frame(width: 380)
+                    Divider()
+                    Button("Quit QuotaBar") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")
+                } label: { Image(systemName: "ellipsis").frame(width: 22, height: 22) }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    .accessibilityLabel("More actions").help("More actions")
+            }.padding(.horizontal, 16).padding(.vertical, 12)
+        }.frame(width: 380).tint(AppStyle.signal)
+            .onChange(of: store.presentationMode) { _, hidden in if hidden { search = "" } }
+    }
+    private var header: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("QuotaBar").font(.headline)
+                Text(store.presentationMode ? "Presentation mode" : "\(store.accounts.count) connected accounts")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if !store.refreshing.isEmpty { ProgressView().controlSize(.small).accessibilityLabel("Refreshing accounts") }
+            else {
+                Button { Task { await store.refreshAll() } } label: { Image(systemName: "arrow.clockwise").frame(width: 24, height: 24) }
+                    .buttonStyle(.borderless).help("Refresh all accounts").accessibilityLabel("Refresh all accounts")
+            }
+            Button { dashboard(); store.connect() } label: { Image(systemName: "plus").frame(width: 24, height: 24) }
+                .buttonStyle(.borderless).disabled(store.presentationMode).help("Add account").accessibilityLabel("Add account")
+        }.padding(16)
     }
     private func dashboard() {
-        openWindow(id: "dashboard"); NSApplication.shared.activate(ignoringOtherApps: true)
+        DashboardWindowController.showDashboard { openWindow(id: "dashboard") }
     }
 }
 struct MenuBarLabel: View {

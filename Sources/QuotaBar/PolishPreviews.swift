@@ -34,9 +34,9 @@ struct PolishPreviews {
                         size: NSSize(width: width, height: 760), directory: directory)
         }
         try capture(MenuBarView().environmentObject(store).environmentObject(updater), name: "menu-light",
-                    dark: false, contrast: false, size: NSSize(width: 380, height: 640), directory: directory)
+                    dark: false, contrast: false, size: NSSize(width: 380, height: 360), directory: directory)
         try capture(MenuBarView().environmentObject(store).environmentObject(updater), name: "menu-dark",
-                    dark: true, contrast: false, size: NSSize(width: 380, height: 640), directory: directory)
+                    dark: true, contrast: false, size: NSSize(width: 380, height: 360), directory: directory)
         try capture(PreferencesView().environmentObject(store).environmentObject(updater).environment(shortcut),
                     name: "settings-light", dark: false, contrast: false, size: NSSize(width: 620, height: 540), directory: directory)
         try capture(ClientSwitchView(account: personal).environmentObject(store), name: "switch-codex",
@@ -50,7 +50,30 @@ struct PolishPreviews {
         store.activeCodexAccount = personal.id.uuidString
         try capture(DashboardView().environmentObject(store).defaultAppStorage(defaults), name: "dashboard-selected",
                     dark: false, contrast: false, size: NSSize(width: 1120, height: 900), directory: directory)
+        var crowded = [personal, work]
+        for index in 1...6 {
+            var account = Account(provider: index.isMultiple(of: 2) ? .openAI : .claude,
+                                  name: index == 1 ? "Research · a longer account label" : "Workspace \(index)",
+                                  detail: "workspace\(index)@example.invalid")
+            let primary = account.provider == .openAI ? "main-primary_window" : "five_hour"
+            let weekly = account.provider == .openAI ? "main-secondary_window" : "seven_day"
+            account.snapshot = UsageSnapshot(windows: [
+                UsageWindow(id: primary, title: "5-hour session", usedPercent: index == 2 ? 100 : Double(index * 12),
+                            resetsAt: now.addingTimeInterval(index == 3 ? -60 : 7200)),
+                UsageWindow(id: weekly, title: "Weekly", usedPercent: Double(index * 10), resetsAt: now.addingTimeInterval(172800))
+            ], fetchedAt: index == 4 ? now.addingTimeInterval(-1200) : now)
+            crowded.append(account)
+        }
+        let crowdedStore = AccountStore(previewAccounts: crowded, previewDefaults: defaults)
+        crowdedStore.activeCodexAccount = personal.id.uuidString
+        crowdedStore.pinnedAccountID = personal.id.uuidString
+        try capture(MenuBarView().environmentObject(crowdedStore).environmentObject(updater), name: "menu-many-accounts",
+                    dark: false, contrast: false, size: NSSize(width: 380, height: 600), directory: directory)
+        try capture(DashboardView().environmentObject(crowdedStore).defaultAppStorage(defaults), name: "dashboard-reading-states",
+                    dark: true, contrast: false, size: NSSize(width: 1120, height: 1000), directory: directory)
         store.presentationMode = true
+        try capture(MenuBarView().environmentObject(store).environmentObject(updater), name: "menu-private",
+                    dark: false, contrast: false, size: NSSize(width: 380, height: 340), directory: directory)
         try capture(DashboardView().environmentObject(store).defaultAppStorage(defaults), name: "presentation-mode",
                     dark: false, contrast: false, size: NSSize(width: 1120, height: 760), directory: directory)
     }
@@ -80,7 +103,7 @@ struct PolishPreviews {
             "appearance": appearance.rawValue,
             "requestedHighContrastAppearance": contrast,
             "systemIncreaseContrast": NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast,
-            "note": "Appearance preview only; a false systemIncreaseContrast does not exercise the full system accessibility setting."
+            "note": "Native appearance preview; a false systemIncreaseContrast does not exercise the full system accessibility setting."
         ]
         let data = try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: directory.appendingPathComponent(name + ".json"))

@@ -6,7 +6,7 @@ enum AppStyle {
     static let sectionSpacing = 24.0
     static let cardRadius = 12.0
     static let rowSpacing = 12.0
-    // A live instrument signal; provider identity is carried by labels.
-    static let signal = Color(nsColor: .systemBlue)
+    // Follow the user's macOS accent; status colors retain their meaning.
+    static let signal = Color.accentColor
 }
 #endif

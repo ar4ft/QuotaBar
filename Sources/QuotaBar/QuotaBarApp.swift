@@ -4,6 +4,7 @@ import AppKit
 
 @main
 struct QuotaBarApp: App {
+    @NSApplicationDelegateAdaptor(QuotaBarDelegate.self) private var appDelegate
     @StateObject private var store = AccountStore()
     @State private var shortcut = GlobalShortcut()
     @StateObject private var updater = AppUpdater()
@@ -27,13 +28,16 @@ struct QuotaBarApp: App {
                 .task {
                     StartupDiagnostics.record("Dashboard appeared")
                     store.start(); updater.start()
-                    await StartupDiagnostics.verifyResponsivenessIfRequested()
                 }
         }.defaultSize(width: 1080, height: 740)
         .windowStyle(.automatic)
         .commands {
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { updater.check() }.disabled(!updater.canCheck)
+            }
+            CommandGroup(after: .windowArrangement) {
+                Button("Keep Running in Menu Bar") { DashboardWindowController.keepRunningInMenuBar() }
+                    .keyboardShortcut("w", modifiers: [.command, .shift])
             }
             CommandGroup(after: .newItem) {
                 Button("Add Account…") { store.connect() }.keyboardShortcut("n")

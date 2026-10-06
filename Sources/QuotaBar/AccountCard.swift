@@ -28,44 +28,49 @@ struct AccountCard: View {
         } else { content }
         }
     }
+    private var mainWindows: [UsageWindow] {
+        let main = AccountAvailability.mainWindows(account)
+        return main.isEmpty ? account.snapshot?.windows ?? [] : main
+    }
+    private var additionalWindows: [UsageWindow] {
+        let ids = Set(mainWindows.map(\.id))
+        return account.snapshot?.windows.filter { !ids.contains($0.id) } ?? []
+    }
     private var content: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                Image(systemName: account.provider.symbol).accessibilityHidden(true).font(.title3)
-                    .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(account.name).font(.headline).lineLimit(2).textSelection(.enabled)
-                    Text(account.provider.title).font(.caption).foregroundStyle(.secondary)
-                    Text(account.detail ?? account.provider.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        VStack(alignment: .leading, spacing: 18) {
+            header
+            HStack(spacing: 8) {
+                AccountStatusLabel(status: availability.status, compact: true)
+                Spacer(minLength: 0)
+                if selectedForClient {
+                    Label("Selected for CLI", systemImage: "checkmark.circle.fill")
+                        .font(.caption.weight(.medium)).foregroundStyle(AppStyle.signal)
+                        .help("Last selected by QuotaBar for \(account.provider == .openAI ? "Codex" : "Claude Code")")
                 }
-                Spacer()
-                Menu {
-                    Button("Use this account…", action: useAccount)
-                    Divider()
-                    Button("Refresh", action: refresh)
-                    Button("Reconnect…", action: reconnect)
-                    Button("Rename…", action: rename)
-                    Button("History & export…", action: history)
-                    Divider(); Button("Remove account", role: .destructive, action: remove).disabled(refreshing)
-                } label: { Label("Account actions", systemImage: "ellipsis").labelStyle(.iconOnly) }
-                    .menuStyle(.borderlessButton).fixedSize()
-                    .accessibilityLabel("Actions for " + account.name).help("Account actions")
-            }
-            AccountStatusLabel(status: availability.status)
-            if selectedForClient {
-                Label("Selected for \(account.provider == .openAI ? "Codex" : "Claude Code")", systemImage: "person.crop.circle.badge.checkmark")
-                    .font(.caption).foregroundStyle(.secondary)
             }
             if let snapshot = account.snapshot {
-                CreditSummary(snapshot: snapshot, provider: account.provider)
-                ForEach(snapshot.windows) { window in
-                    UsageMeter(window: window, tint: account.provider.tint, showRemaining: showRemaining)
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 110), spacing: 16, alignment: .top),
+                                         count: min(2, max(1, mainWindows.count))), alignment: .leading, spacing: 16) {
+                    ForEach(mainWindows) { window in
+                        UsageMeter(window: window, tint: account.provider.tint, showRemaining: showRemaining)
+                    }
                 }
+                DisclosureGroup("Usage details") {
+                    VStack(alignment: .leading, spacing: 16) {
+                        CreditSummary(snapshot: snapshot, provider: account.provider)
+                        ForEach(additionalWindows) { window in
+                            UsageMeter(window: window, tint: account.provider.tint, showRemaining: showRemaining)
+                        }
+                        if let forecast { ForecastSummary(forecast: forecast) }
+                        Text("Last reading: " + snapshot.fetchedAt.formatted(date: .abbreviated, time: .shortened))
+                    }.padding(.top, 10)
+                }.font(.caption).foregroundStyle(.secondary)
             } else {
-                Text(refreshing ? "Reading subscription usage…" : "No usage reading yet")
-                    .font(.callout).foregroundStyle(.secondary).padding(.vertical, 14)
+                HStack(spacing: 8) {
+                    Image(systemName: "chart.bar.xaxis").accessibilityHidden(true)
+                    Text(refreshing ? "Reading subscription usage…" : "No usage reading yet")
+                }.font(.callout).foregroundStyle(.secondary).padding(.vertical, 20)
             }
-            if let forecast { ForecastSummary(forecast: forecast) }
             if let error {
                 VStack(alignment: .leading, spacing: 8) {
                     Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
@@ -73,34 +78,74 @@ struct AccountCard: View {
                     Button("Reconnect account", action: reconnect).font(.caption)
                 }
             }
+            Spacer(minLength: 0)
             Divider()
-            HStack {
-                if refreshing { ProgressView().controlSize(.mini); Text("Refreshing…").font(.caption).foregroundStyle(.secondary) }
-                else if let snapshot = account.snapshot {
-                    TimelineView(.periodic(from: .now, by: 60)) { _ in
-                        HStack(spacing: 5) {
-                            Image(systemName: snapshot.isStale || error != nil ? "clock" : "checkmark.circle").accessibilityHidden(true)
-                            Text(snapshot.isStale || error != nil ? "Last reading" : "Updated")
-                            Text(snapshot.fetchedAt, style: .relative)
-                        }.font(.caption).foregroundStyle(.secondary)
-                    }
-                } else { Text("Awaiting first reading").font(.caption).foregroundStyle(.secondary) }
-                Spacer()
-                if let plan = account.snapshot?.plan { Text(plan.capitalized).font(.caption.weight(.medium)).foregroundStyle(.secondary) }
-            }
-            HStack {
-                Button(selectedForClient ? "Use again" : "Use account",
-                       systemImage: "arrow.left.arrow.right", action: useAccount)
-                    .disabled(refreshing)
-                    .help("Reapply this account if the CLI sign-in changed outside QuotaBar")
-                    .accessibilityLabel(selectedForClient ? "Reapply \(account.name) in the CLI" : "Use \(account.name) in the CLI")
-                Spacer()
-                Button("History", systemImage: "chart.xyaxis.line", action: history)
+            HStack(spacing: 8) {
+                freshness
+                Spacer(minLength: 4)
+                Button(action: history) { Image(systemName: "chart.xyaxis.line") }
+                    .buttonStyle(.borderless).help("Usage history and export")
                     .accessibilityLabel("Usage history for " + account.name)
+                Button(selectedForClient ? "Use again" : "Use account", action: useAccount)
+                    .buttonStyle(.bordered).tint(AppStyle.signal)
+                    .disabled(refreshing)
+                    .help(selectedForClient ? "Reapply this account if the CLI sign-in changed" : "Use this account in the CLI")
+                    .accessibilityLabel(selectedForClient ? "Reapply \(account.name) in the CLI" : "Use \(account.name) in the CLI")
             }.controlSize(.small)
-        }.padding(AppStyle.cardPadding).frame(maxWidth: .infinity, alignment: .leading)
+        }.padding(AppStyle.cardPadding).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .modifier(AccountSurface(selected: selectedForClient))
             .accessibilityElement(children: .contain)
+    }
+    private var header: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: account.provider.symbol)
+                .font(.system(size: 18, weight: .medium)).foregroundStyle(.secondary)
+                .frame(width: 36, height: 36)
+                .background(Color(nsColor: .quaternaryLabelColor).opacity(0.5), in: RoundedRectangle(cornerRadius: 9))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(account.name).font(.headline).lineLimit(2).textSelection(.enabled).help(account.name)
+                HStack(spacing: 5) {
+                    Text(account.provider.title)
+                    if let plan = account.snapshot?.plan { Text("·"); Text(plan.capitalized) }
+                }.font(.caption).foregroundStyle(.secondary)
+                if let detail = account.detail {
+                    Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1).textSelection(.enabled).help(detail)
+                }
+            }
+            Spacer(minLength: 0)
+            Menu {
+                Button("Use this account…", action: useAccount).disabled(refreshing)
+                Button("History & export…", action: history)
+                Divider()
+                Button("Refresh", action: refresh).disabled(refreshing)
+                Button("Reconnect…", action: reconnect)
+                Button("Rename…", action: rename)
+                Divider()
+                Button("Remove account", role: .destructive, action: remove).disabled(refreshing)
+            } label: {
+                Image(systemName: "ellipsis").frame(width: 24, height: 24).contentShape(Rectangle())
+            }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .accessibilityLabel("Actions for " + account.name).help("Account actions")
+        }
+    }
+    @ViewBuilder private var freshness: some View {
+        if refreshing {
+            ProgressView().controlSize(.mini)
+            Text("Refreshing…").font(.caption).foregroundStyle(.secondary)
+        } else if let snapshot = account.snapshot {
+            TimelineView(.periodic(from: .now, by: 60)) { _ in
+                HStack(spacing: 4) {
+                    Image(systemName: snapshot.isStale || error != nil ? "clock" : "checkmark.circle").accessibilityHidden(true)
+                    Text(snapshot.isStale || error != nil ? "Last reading" : "Updated")
+                    Text(snapshot.fetchedAt, style: .relative).lineLimit(1)
+                }.font(.caption).foregroundStyle(.secondary)
+                    .help("Last reading: " + snapshot.fetchedAt.formatted(date: .abbreviated, time: .shortened))
+                    .accessibilityLabel("Last reading \(snapshot.fetchedAt.formatted(date: .abbreviated, time: .shortened))")
+            }
+        } else {
+            Text("Awaiting reading").font(.caption).foregroundStyle(.secondary)
+        }
     }
 }
 #endif
