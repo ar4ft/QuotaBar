@@ -2,36 +2,18 @@
 import Foundation
 import Security
 
-// A disposable locked Keychain containing synthetic bytes, never the login Keychain.
+// The script creates and locks a disposable Keychain containing synthetic bytes.
+// This check only reads that fixture; it never searches the login Keychain.
 enum KeychainChecks {
     private enum Failure: Error { case checkFailed }
-    static func run() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("quotabar-keychain-checks-" + UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let path = root.appendingPathComponent("fixture.keychain-db").path
-        let password = Array(UUID().uuidString.utf8)
+    static func run(path: String) throws {
+        try require(path.contains("/quotabar-keychain-checks.") && path.hasSuffix("/fixture.keychain-db"))
         var keychain: SecKeychain?
-        let created = password.withUnsafeBytes { bytes in
-            SecKeychainCreate(path, UInt32(bytes.count), bytes.baseAddress, false, nil, &keychain)
-        }
-        try require(created == errSecSuccess)
+        let opened = try KeychainInteraction.perform(allowUI: false) { SecKeychainOpen(path, &keychain) }
+        try require(opened == errSecSuccess)
         guard let keychain else { throw Failure.checkFailed }
-        defer {
-            _ = try? KeychainInteraction.perform(allowUI: false) { SecKeychainDelete(keychain) }
-        }
-        let service = "QuotaBar test fixture", account = "synthetic", secret = Array("not-a-real-token".utf8)
-        let added = service.withCString { serviceBytes in
-            account.withCString { accountBytes in
-                secret.withUnsafeBytes { secretBytes in
-                    guard let secretAddress = secretBytes.baseAddress else { return errSecParam }
-                    return SecKeychainAddGenericPassword(keychain, UInt32(service.utf8.count), serviceBytes,
-                        UInt32(account.utf8.count), accountBytes, UInt32(secretBytes.count), secretAddress, nil)
-                }
-            }
-        }
-        try require(added == errSecSuccess)
-        try require(SecKeychainLock(keychain) == errSecSuccess)
+        StartupDiagnostics.record("Locked Keychain fixture opened")
+        let service = "QuotaBar test fixture", account = "synthetic"
         var previous: DarwinBoolean = false
         try require(SecKeychainGetUserInteractionAllowed(&previous) == errSecSuccess)
         let started = Date()
@@ -53,6 +35,7 @@ enum KeychainChecks {
             try require(result == errSecInteractionNotAllowed || result == errSecAuthFailed)
             try require(KeychainInteraction.requiresPermission(NSError(domain: NSOSStatusErrorDomain, code: Int(result))))
         }
+        StartupDiagnostics.record("Legacy locked Keychain reads stayed silent")
         let copyStatus = try KeychainInteraction.perform(allowUI: false) {
             let query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
@@ -64,6 +47,7 @@ enum KeychainChecks {
             return SecItemCopyMatching(query as CFDictionary, &value)
         }
         try require(copyStatus == errSecInteractionNotAllowed || copyStatus == errSecAuthFailed)
+        StartupDiagnostics.record("SecItem locked Keychain read stayed silent")
         try require(Date().timeIntervalSince(started) < 5)
         do {
             try KeychainInteraction.perform(allowUI: false) { throw Failure.checkFailed }

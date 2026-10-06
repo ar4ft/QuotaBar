@@ -10,8 +10,9 @@ struct QuotaBarApp: App {
     @StateObject private var updater = AppUpdater()
     init() {
         StartupDiagnostics.record("App initializer started")
-        if CommandLine.arguments.contains("--verify-keychain") {
-            do { try KeychainChecks.run(); exit(0) }
+        if let index = CommandLine.arguments.firstIndex(of: "--verify-keychain"),
+           CommandLine.arguments.indices.contains(index + 1) {
+            do { try KeychainChecks.run(path: CommandLine.arguments[index + 1]); exit(0) }
             catch { fputs("Noninteractive Keychain checks failed: \(error.localizedDescription)\n", stderr); exit(1) }
         }
         if CommandLine.arguments.contains("--verify-client-switching") {
