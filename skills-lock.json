@@ -34,6 +34,20 @@
       "skillPath": "modules/creative/.agents/skills/macos-design/SKILL.md",
       "sourceRevision": "f4b302aadb0c99023b03e1f1b38ffed3697fbedf",
       "computedHash": "ff42e22937dca347f097102d00b87a565b81233bfa22387ec148178211fde008"
+    },
+    "macos-settings-ui-fayazara": {
+      "source": "fayazara/macos-app-skills",
+      "sourceType": "github",
+      "skillPath": "settings-ui/SKILL.md",
+      "sourceRevision": "a60365ae85bfc3d1f2f8b260b080d77bfb2f3ec0",
+      "computedHash": "e4a55b2b7b2588e28b4054f703b35d96d1c0acd4872dd22529ce7662c5b10cef"
+    },
+    "macos-patterns-fayazara": {
+      "source": "fayazara/macos-app-skills",
+      "sourceType": "github",
+      "skillPath": "macos-patterns/SKILL.md",
+      "sourceRevision": "a60365ae85bfc3d1f2f8b260b080d77bfb2f3ec0",
+      "computedHash": "b1dd249b315a9c09596aaf24158e0ed3b65107040885dc42ee78d0abc0f31788"
     }
   }
 }

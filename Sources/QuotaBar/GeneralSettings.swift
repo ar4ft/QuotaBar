@@ -9,16 +9,20 @@ struct GeneralSettings: View {
     @State private var login = LaunchAtLogin()
     var body: some View {
         Form {
-            Section("General") {
+            Section("Monitoring") {
                 Picker("Refresh accounts every", selection: $store.refreshMinutes) {
                     Text("1 minute").tag(1); Text("5 minutes").tag(5); Text("15 minutes").tag(15); Text("30 minutes").tag(30)
                 }
-                Toggle("Presentation mode", isOn: $store.presentationMode)
-                Text("Hides account identities and balances and silences usage alerts. Existing QuotaBar notifications are cleared when enabled.")
-                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show remaining allowance in dashboard", isOn: $store.showRemaining)
                 Text("Closing the dashboard keeps QuotaBar running in the menu bar. Reopen it from the menu bar or your keyboard shortcut. Quit QuotaBar stops monitoring.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Privacy") {
+                Toggle("Presentation mode", isOn: $store.presentationMode)
+                Text("Hides account identities and balances and silences usage alerts. Existing QuotaBar notifications are cleared when enabled.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Startup") {
                 LaunchAtLoginToggle(login: login)
                 if login.requiresApproval {
                     Text("Approve QuotaBar in Login Items to finish enabling launch at login.")
@@ -43,6 +47,9 @@ struct GeneralSettings: View {
                 Text("Default: Control + Option + Q. No Accessibility permission is needed.").font(.caption).foregroundStyle(.secondary)
             }
         }.formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .contentMargins(.top, 8, for: .scrollContent)
+        .softScrollEdges()
         .task { login.refresh() }
         .onChange(of: scenePhase) { _, phase in if phase == .active { login.refresh() } }
     }

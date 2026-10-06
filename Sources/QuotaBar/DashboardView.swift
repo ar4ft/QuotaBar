@@ -4,6 +4,7 @@ import AppKit
 import QuotaCore
 
 struct DashboardView: View {
+    var openSettings: () -> Void = {}
     @EnvironmentObject private var store: AccountStore
     @Environment(\.openWindow) private var openWindow
     @State private var filter: AccountFilter? = .all
@@ -65,7 +66,7 @@ struct DashboardView: View {
                         ContentUnavailableView("No matching accounts", systemImage: "line.3.horizontal.decrease.circle",
                                                description: Text("Try another search or turn off the availability filter."))
                     } else if listLayout {
-                        LazyVStack(spacing: 12) { ForEach(accounts) { account in card(account) } }
+                        LazyVStack(spacing: 8) { ForEach(accounts) { account in card(account, compact: true) } }
                     } else {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16, alignment: .top)], alignment: .leading, spacing: 16) {
                             ForEach(accounts) { account in card(account) }
@@ -107,12 +108,12 @@ struct DashboardView: View {
         .task {
             StartupDiagnostics.verifyResponsivenessIfRequested(reopenDashboard: {
                 DashboardWindowController.showDashboard { openWindow(id: "dashboard") }
-            }, clock: { store.clock })
+            }, openSettings: openSettings, clock: { store.clock })
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { notification in
             guard let window = notification.object as? NSWindow,
                   window === DashboardWindowController.window else { return }
-            NSApplication.shared.setActivationPolicy(.accessory)
+            AppWindowActivation.update(excluding: window)
         }
         .onChange(of: store.presentationMode) { _, hidden in
             if hidden { search = ""; availableOnly = false; renameAccount = nil; deleting = nil; historyAccount = nil }
@@ -153,13 +154,13 @@ struct DashboardView: View {
             Button("Add account") { store.connect() }.buttonStyle(.borderedProminent).disabled(store.presentationMode)
         }.frame(maxWidth: .infinity).padding(.vertical, 40)
     }
-    private func card(_ account: Account) -> some View {
+    private func card(_ account: Account, compact: Bool = false) -> some View {
         AccountCard(account: account, error: store.errors[account.id], refreshing: store.refreshing.contains(account.id),
                     showRemaining: store.showRemaining, presentationMode: store.presentationMode, forecast: store.forecast(account), availability: store.availability(account),
                     history: { historyAccount = account },
                     refresh: { Task { await store.refresh(account.id) } }, reconnect: { store.connect(account) },
                     rename: { newName = account.name; renameAccount = account }, remove: { deleting = account },
-                    useAccount: { store.requestSwitch(account) }, selectedForClient: store.activeAccountID(account.provider) == account.id.uuidString)
+                    useAccount: { store.requestSwitch(account) }, selectedForClient: store.activeAccountID(account.provider) == account.id.uuidString, compact: compact)
     }
     private func count(_ item: AccountFilter) -> Int {
         store.accounts.filter { item == .all || $0.provider.rawValue == item.rawValue }.count

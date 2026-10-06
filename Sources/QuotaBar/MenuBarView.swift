@@ -4,6 +4,7 @@ import AppKit
 import QuotaCore
 
 struct MenuBarView: View {
+    var openSettings: () -> Void = {}
     @EnvironmentObject private var store: AccountStore
     @EnvironmentObject private var updater: AppUpdater
     @Environment(\.openWindow) private var openWindow
@@ -68,7 +69,7 @@ struct MenuBarView: View {
             HStack(spacing: 12) {
                 Button("Open Dashboard", action: dashboard).buttonStyle(.borderless)
                 Spacer()
-                SettingsLink { Image(systemName: "gearshape") }
+                Button(action: openSettings) { Image(systemName: "gearshape") }
                     .buttonStyle(.borderless).help("Settings").accessibilityLabel("Settings")
                 Menu {
                     Button("Keep Running in Menu Bar") { DashboardWindowController.keepRunningInMenuBar() }

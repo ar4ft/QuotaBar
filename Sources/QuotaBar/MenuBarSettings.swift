@@ -27,6 +27,9 @@ struct MenuBarSettings: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }.formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .contentMargins(.top, 8, for: .scrollContent)
+        .softScrollEdges()
     }
 
 }

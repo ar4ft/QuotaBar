@@ -8,6 +8,7 @@ struct QuotaBarApp: App {
     @StateObject private var store = AccountStore()
     @State private var shortcut = GlobalShortcut()
     @StateObject private var updater = AppUpdater()
+    @Environment(\.openWindow) private var openWindow
     init() {
         StartupDiagnostics.record("App initializer started")
         if CommandLine.arguments.contains("--verify-client-switching") {
@@ -23,7 +24,7 @@ struct QuotaBarApp: App {
     }
     var body: some Scene {
         Window("QuotaBar", id: "dashboard") {
-            DashboardView().environmentObject(store)
+            DashboardView(openSettings: showSettings).environmentObject(store)
                 .background(ShortcutBridge().environmentObject(store).environment(shortcut))
                 .task {
                     StartupDiagnostics.record("Dashboard appeared")
@@ -32,6 +33,9 @@ struct QuotaBarApp: App {
         }.defaultSize(width: 1080, height: 740)
         .windowStyle(.automatic)
         .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…", action: showSettings).keyboardShortcut(",")
+            }
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { updater.check() }.disabled(!updater.canCheck)
             }
@@ -45,17 +49,15 @@ struct QuotaBarApp: App {
             }
         }
         MenuBarExtra {
-            MenuBarView().environmentObject(store).environmentObject(updater)
+            MenuBarView(openSettings: showSettings).environmentObject(store).environmentObject(updater)
                 .background(ShortcutBridge().environmentObject(store).environment(shortcut)).task { store.start(); updater.start() }
         } label: {
             // Keep the status-item label free of task/onAppear/background side effects.
             MenuBarLabel().environmentObject(store)
         }.menuBarExtraStyle(.window)
-        Settings {
-            PreferencesView().environmentObject(store).environment(shortcut).environmentObject(updater)
-                .background(ShortcutBridge().environmentObject(store).environment(shortcut))
-        }
-            .windowResizability(.contentSize)
+    }
+    private func showSettings() {
+        SettingsWindowController.show(store: store, shortcut: shortcut, updater: updater, openWindow: openWindow)
     }
 }
 #else

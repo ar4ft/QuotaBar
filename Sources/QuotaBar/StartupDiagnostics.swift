@@ -13,9 +13,10 @@ enum StartupDiagnostics {
     }
 
     @MainActor private static var checking = false
-    private enum VerificationFailure: Error { case missingWindow, closeFailed, backgroundClockStopped, reopenFailed }
+    private enum VerificationFailure: Error { case missingWindow, closeFailed, backgroundClockStopped, reopenFailed, settingsFailed }
     @MainActor static func verifyResponsivenessIfRequested(
         reopenDashboard: @escaping @MainActor () -> Void,
+        openSettings: @escaping @MainActor () -> Void,
         clock: @escaping @MainActor () -> Date
     ) {
         guard !checking,
@@ -31,13 +32,41 @@ enum StartupDiagnostics {
                     guard let window = DashboardWindowController.window, window.isVisible else {
                         throw VerificationFailure.missingWindow
                     }
+                    openSettings()
+                    try await Task.sleep(for: .seconds(1))
+                    guard let settings = SettingsWindowController.settingsWindow, settings.isVisible,
+                          settings.styleMask.contains(.fullSizeContentView), settings.toolbar != nil else {
+                        throw VerificationFailure.settingsFailed
+                    }
+                    openSettings()
+                    guard SettingsWindowController.settingsWindow === settings else {
+                        throw VerificationFailure.settingsFailed
+                    }
                     let lastClock = clock()
                     DashboardWindowController.keepRunningInMenuBar()
+                    try await Task.sleep(for: .seconds(1))
+                    guard !window.isVisible, settings.isVisible,
+                          NSApplication.shared.activationPolicy() == .regular else {
+                        throw VerificationFailure.settingsFailed
+                    }
+                    record("Dashboard closed; Settings remains visible and active")
+                    settings.performClose(nil)
                     try await Task.sleep(for: .seconds(1))
                     guard !window.isVisible, NSApplication.shared.activationPolicy() == .accessory else {
                         throw VerificationFailure.closeFailed
                     }
-                    record("Dashboard closed; running in menu bar")
+                    record("Settings closed; running in menu bar")
+                    openSettings()
+                    try await Task.sleep(for: .seconds(1))
+                    guard settings.isVisible, NSApplication.shared.activationPolicy() == .regular else {
+                        throw VerificationFailure.settingsFailed
+                    }
+                    settings.performClose(nil)
+                    try await Task.sleep(for: .seconds(1))
+                    guard !settings.isVisible, NSApplication.shared.activationPolicy() == .accessory else {
+                        throw VerificationFailure.settingsFailed
+                    }
+                    record("Settings singleton, native toolbar, and background reopen verified")
                     // The shared monitoring clock must advance even without the dashboard.
                     try await Task.sleep(for: .seconds(16))
                     guard NSApplication.shared.isRunning, clock() > lastClock else {

@@ -37,8 +37,15 @@ struct PolishPreviews {
                     dark: false, contrast: false, size: NSSize(width: 380, height: 360), directory: directory)
         try capture(MenuBarView().environmentObject(store).environmentObject(updater), name: "menu-dark",
                     dark: true, contrast: false, size: NSSize(width: 380, height: 360), directory: directory)
+        for tab in SettingsTab.allCases {
+            for dark in [false, true] {
+                try capture(PreferencesView(initialTab: tab).environmentObject(store).environmentObject(updater).environment(shortcut),
+                            name: "settings-" + tab.rawValue + (dark ? "-dark" : "-light"), dark: dark, contrast: false,
+                            size: NSSize(width: 740, height: 640), directory: directory)
+            }
+        }
         try capture(PreferencesView().environmentObject(store).environmentObject(updater).environment(shortcut),
-                    name: "settings-light", dark: false, contrast: false, size: NSSize(width: 620, height: 540), directory: directory)
+                    name: "settings-compact", dark: false, contrast: false, size: NSSize(width: 680, height: 520), directory: directory)
         try capture(ClientSwitchView(account: personal).environmentObject(store), name: "switch-codex",
                     dark: false, contrast: false, size: NSSize(width: 660, height: 780), directory: directory)
         try capture(ClientSwitchView(account: work).environmentObject(store), name: "switch-claude",
@@ -71,6 +78,11 @@ struct PolishPreviews {
                     dark: false, contrast: false, size: NSSize(width: 380, height: 600), directory: directory)
         try capture(DashboardView().environmentObject(crowdedStore).defaultAppStorage(defaults), name: "dashboard-reading-states",
                     dark: true, contrast: false, size: NSSize(width: 1120, height: 1000), directory: directory)
+        defaults.set(true, forKey: "listLayout")
+        for (name, dark, width) in [("dashboard-list-many", true, 1120.0), ("dashboard-list-compact", false, 800.0)] {
+            try capture(DashboardView().environmentObject(crowdedStore).defaultAppStorage(defaults), name: name,
+                        dark: dark, contrast: false, size: NSSize(width: width, height: 1000), directory: directory)
+        }
         store.presentationMode = true
         try capture(MenuBarView().environmentObject(store).environmentObject(updater), name: "menu-private",
                     dark: false, contrast: false, size: NSSize(width: 380, height: 340), directory: directory)
