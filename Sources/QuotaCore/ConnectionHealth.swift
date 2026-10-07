@@ -12,7 +12,7 @@ public enum ConnectionIssue: String, Sendable {
     }
     public var title: String {
         switch self {
-        case .expired: return "Session expired · reconnect"
+        case .expired: return "Session rejected · reconnect"
         case .denied: return "Access denied · reconnect"
         case .rateLimited: return "Provider cooldown"
         case .failed: return "Refresh failed"

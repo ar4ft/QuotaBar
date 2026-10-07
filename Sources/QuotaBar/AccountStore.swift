@@ -30,6 +30,7 @@ final class AccountStore: ObservableObject {
     @AppStorage("shortcutLetter") var shortcutLetter = "Q" { willSet { objectWillChange.send() } }
     @AppStorage("shortcutModifiers") var shortcutModifiersRaw = ShortcutModifiers.controlOption.rawValue { willSet { objectWillChange.send() } }
     @Published private(set) var connectionIssues: [UUID: ConnectionIssue] = [:]
+    @Published private(set) var refreshDiagnostics: [UUID: RefreshDiagnostic] = [:]
     @AppStorage("pinnedWindowID") var pinnedWindowID = "" { willSet { objectWillChange.send() } }
     @Published private(set) var notificationAuthorization: UNAuthorizationStatus = .notDetermined
     @Published private(set) var requestingNotificationPermission = false
@@ -59,11 +60,26 @@ final class AccountStore: ObservableObject {
         return UsageForecast.estimate(histories[account.id] ?? [], windowID: window.id, now: clock)
     }
     var attentionCount: Int { accounts.filter { health($0).needsAttention }.count }
+    var diagnosticReport: String {
+        guard !presentationMode else { return "Account diagnostics hidden in presentation mode." }
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unbundled"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
+        #if arch(x86_64)
+        let architecture = "Intel (x86_64)"
+        #else
+        let architecture = "Apple Silicon (arm64)"
+        #endif
+        let header = "QuotaBar \(version) (\(build)) · \(architecture)\nmacOS \(ProcessInfo.processInfo.operatingSystemVersionString)"
+        let reports = accounts.compactMap { account in
+            refreshDiagnostics[account.id]?.report(accountID: account.id, provider: account.provider)
+        }
+        return ([header] + reports).joined(separator: "\n\n")
+    }
     func retryDate(_ id: UUID) -> Date? { cooldowns[id] }
     let root: URL
     private let vault = KeychainVault()
     private var credentialWrites = PendingCredentialWrites()
-    private let client = UsageClient()
+    private let transport = EphemeralTransport()
     private var cooldowns: [UUID: Date] = [:]
     private var resetCreditCooldowns: [UUID: Date] = [:]
     private var timerTask: Task<Void, Never>?
@@ -73,7 +89,8 @@ final class AccountStore: ObservableObject {
     private var epoch: [UUID: UUID] = [:]
     var metadataURL: URL { root.appendingPathComponent("accounts.json") }
 
-    init(previewAccounts: [Account]? = nil, previewDefaults: UserDefaults? = nil, previewIssues: [UUID: ConnectionIssue] = [:]) {
+    init(previewAccounts: [Account]? = nil, previewDefaults: UserDefaults? = nil, previewIssues: [UUID: ConnectionIssue] = [:],
+         previewDiagnostics: [UUID: RefreshDiagnostic] = [:]) {
         isPreview = previewAccounts != nil
         root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("QuotaBar", isDirectory: true)
@@ -81,6 +98,7 @@ final class AccountStore: ObservableObject {
         if let previewAccounts {
             accounts = previewAccounts; writable = false
             connectionIssues = previewIssues
+            refreshDiagnostics = previewDiagnostics
             errors = previewIssues.mapValues { $0 == .keychainAccess ? KeychainInteraction.permissionMessage : $0.title }
             if let previewDefaults {
                 _presentationMode = AppStorage(wrappedValue: false, "presentationMode", store: previewDefaults)
@@ -173,6 +191,7 @@ final class AccountStore: ObservableObject {
             try persist()
             try vault.remove(id: id, allowAuthenticationUI: true)
             credentialWrites.remove(id)
+            refreshDiagnostics[id] = nil
             errors[id] = nil; connectionIssues[id] = nil; cooldowns[id] = nil; resetCreditCooldowns[id] = nil; epoch[id] = nil
             if pinnedAccountID == id.uuidString { pinAccount("") }
             resetAttempts[id] = nil; histories[id] = nil; historyErrors[id] = nil
@@ -206,30 +225,45 @@ final class AccountStore: ObservableObject {
         }
         refreshing.insert(id)
         defer { refreshing.remove(id) }
+        guard let provider = accounts.first(where: { $0.id == id })?.provider else { return }
+        refreshDiagnostics[id] = RefreshDiagnostic()
+        let client = UsageClient(transport: transport) { [weak self] request in
+            await self?.recordRequest(request, id: id, generation: generation)
+        }
         do {
             var credential = try loadCredential(id: id, allowAuthenticationUI: allowKeychainUI)
+            refreshDiagnostics[id]?.credential = CredentialDiagnostics(credential)
             if credential.externallyManaged == true,
                let account = accounts.first(where: { $0.id == id }),
                activeAccountID(account.provider) == id.uuidString {
+                refreshDiagnostics[id]?.stage = .clientSessionRead
                 let storage = try NativeClientStorage(provider: account.provider, codexHome: codexSwitchHome,
                     claudeKeychain: ClientSecrets(service: "Claude Code-credentials", account: NSUserName(),
                                                  allowAuthenticationUI: allowKeychainUI))
                 if let live = try storage.read(), try live.belongs(to: credential) {
                     credential = try live.credential()
+                    refreshDiagnostics[id]?.credential = CredentialDiagnostics(credential)
+                    refreshDiagnostics[id]?.stage = .clientSessionSave
                     try saveCredential(credential, id: id, allowAuthenticationUI: allowKeychainUI)
                 }
             }
             var snapshot: UsageSnapshot
+            refreshDiagnostics[id]?.stage = .usage
             do { snapshot = try await client.fetch(credential) }
             catch QuotaError.unauthorized where credential.refreshToken != nil && credential.externallyManaged != true {
                 // Serialize per account, then persist rotated credentials before another usage request.
                 // Check write permission before renewing a token that the provider may revoke.
+                refreshDiagnostics[id]?.stage = .renewalPreflight
                 try saveCredential(credential, id: id, allowAuthenticationUI: allowKeychainUI)
+                refreshDiagnostics[id]?.stage = .tokenRenewal
                 credential = try await client.refreshOwnedCodex(credential)
                 guard epoch[id] == generation else { return }
                 // The Keychain can lock while the network request is in flight.
                 credentialWrites.retain(credential, id: id)
+                refreshDiagnostics[id]?.credential = CredentialDiagnostics(credential)
+                refreshDiagnostics[id]?.stage = .renewedTokenSave
                 try saveCredential(credential, id: id, allowAuthenticationUI: allowKeychainUI)
+                refreshDiagnostics[id]?.stage = .usage
                 snapshot = try await client.fetch(credential)
             }
             if credential.kind == .codex, snapshot.availableResetCredits == nil,
@@ -249,6 +283,7 @@ final class AccountStore: ObservableObject {
             accounts[index].snapshot = snapshot
             accounts[index].alertState = evaluation.state
             accounts[index].creditAlertState = evaluation.creditState
+            refreshDiagnostics[id]?.stage = .accountSave
             do { try persist() }
             catch { accounts[index] = previous; throw error }
             errors[id] = nil; connectionIssues[id] = nil; cooldowns[id] = nil
@@ -265,13 +300,24 @@ final class AccountStore: ObservableObject {
                 guard epoch[id] == generation else { return }
                 histories[id] = samples; historyErrors[id] = nil
             } catch { historyErrors[id] = "History could not be saved: \(error.localizedDescription)" }
+            refreshDiagnostics[id]?.stage = .complete
+            refreshDiagnostics[id]?.finished = true
+            if let report = refreshDiagnostics[id] { RefreshLogging.record(report, id: id, provider: provider) }
         } catch {
             guard epoch[id] == generation else { return }
+            refreshDiagnostics[id]?.failure = DiagnosticFailure(error)
+            refreshDiagnostics[id]?.finished = true
+            if let report = refreshDiagnostics[id] { RefreshLogging.record(report, id: id, provider: provider) }
             let permissionRequired = KeychainInteraction.requiresPermission(error)
             errors[id] = permissionRequired ? KeychainInteraction.permissionMessage : error.localizedDescription
             connectionIssues[id] = permissionRequired ? .keychainAccess : ConnectionIssue.classify(error)
             if case QuotaError.rateLimited(let until) = error { cooldowns[id] = until }
         }
+    }
+    private func recordRequest(_ request: UsageRequestDiagnostic, id: UUID, generation: UUID) {
+        guard epoch[id] == generation else { return }
+        refreshDiagnostics[id]?.lastRequest = request
+        RefreshLogging.request(request, id: id)
     }
     private func refreshExpiredWindows() async {
         for account in accounts {
@@ -438,9 +484,15 @@ final class AccountStore: ObservableObject {
     }
     private func saveCredential(_ credential: Credential, id: UUID, allowAuthenticationUI: Bool = false) throws {
         let vault = vault
-        try credentialWrites.save(credential, id: id) {
-            try vault.save($0, id: id, allowAuthenticationUI: allowAuthenticationUI)
+        do {
+            try credentialWrites.save(credential, id: id) {
+                try vault.save($0, id: id, allowAuthenticationUI: allowAuthenticationUI)
+            }
+        } catch {
+            if !isPreview { RefreshLogging.saveFailed(id: id, kind: credential.kind, failure: DiagnosticFailure(error)) }
+            throw error
         }
+        if !isPreview { RefreshLogging.saved(id: id, kind: credential.kind) }
     }
     private func persist() throws {
         guard writable else { throw CocoaError(.fileWriteNoPermission) }

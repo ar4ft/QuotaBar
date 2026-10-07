@@ -268,6 +268,18 @@ To capture startup milestones, force-quit the frozen instance, then launch from 
 
 The same fixed milestone messages appear in Console under subsystem `com.quotabar.app`, category `Startup`; they contain no account details or credentials. If startup still hangs, Activity Monitor → QuotaBar → Sample Process captures the main-thread call graph. The CI startup check is `./scripts/verify-startup.sh` on a Mac after building the bundle.
 
+## Authentication and refresh diagnostics (0.11.1)
+
+Open **Connection health → Refresh diagnostics** to inspect the latest attempt for each account. **Copy diagnostics** includes the app version, executable architecture, macOS version, local account UUID, credential type, renewal ownership, reported access-token expiry when available, failed step, and request status. Reports are kept in memory and respect presentation mode. JWT expiry is unverified metadata; an unexpired token can still be revoked or rejected. HTTP 401 now says **Session rejected**, rather than claiming expiry is the only possible cause.
+
+Keychain-save outcomes, provider request statuses, and refresh outcomes also appear in Console under subsystem `com.quotabar.app`, category `Refresh`, and on stderr when launched from Terminal. They use fixed endpoint labels and numeric error codes, without tokens, response bodies, provider account IDs, email addresses, account names, or credential file paths. To capture refresh failures, refresh the affected account and run:
+
+```sh
+log show --last 15m --style compact --predicate 'subsystem == "com.quotabar.app" AND category == "Refresh"'
+```
+
+An imported Codex file is a read-only credential copy. QuotaBar does not follow renewals in T3 Code or OpenCode, or rotate imported refresh tokens. Renew the source sign-in, then reconnect using its current `auth.json`, or use **Sign in with OpenAI** inside QuotaBar for an independently renewable session. CLI-managed sessions only follow the matching active session in QuotaBar's configured client home. A successful Keychain write can be silent; permission failures and HTTP rejections are separate diagnostic results.
+
 ## Native product polish (0.10.0)
 
 Account cards place the main quota windows side by side, with credits, model-specific windows, and forecasts under **Usage details**. The surface, selection, and hover states use native colors and your Mac's accent color. Status text distinguishes low, stale, failed, and unconfirmed-reset readings. The menu bar uses compact provider-grouped account rows, confirmed main allowance, selection/pin markers, and per-account switching, refresh, reconnect, and pin actions. Search appears when more than six accounts are saved.

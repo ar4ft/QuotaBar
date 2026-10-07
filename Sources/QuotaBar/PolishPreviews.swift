@@ -89,6 +89,19 @@ struct PolishPreviews {
                     dark: false, contrast: false, size: NSSize(width: 800, height: 760), directory: directory)
         try capture(MenuBarView().environmentObject(blockedStore).environmentObject(updater), name: "menu-keychain-permission",
                     dark: true, contrast: false, size: NSSize(width: 380, height: 300), directory: directory)
+        var rejectedDiagnostic = RefreshDiagnostic(startedAt: now)
+        // Synthetic opaque credential only; previews never read or save real auth.
+        rejectedDiagnostic.credential = CredentialDiagnostics(Credential(kind: .codex, secret: "synthetic-access"))
+        rejectedDiagnostic.stage = .usage; rejectedDiagnostic.failure = .http(401); rejectedDiagnostic.finished = true
+        rejectedDiagnostic.lastRequest = UsageRequestDiagnostic(endpoint: .codexUsage, result: .http(401))
+        let rejectedStore = AccountStore(previewAccounts: [personal], previewDefaults: defaults,
+                                         previewIssues: [personal.id: .expired], previewDiagnostics: [personal.id: rejectedDiagnostic])
+        for dark in [false, true] {
+            try capture(ConnectionHealthView().environmentObject(rejectedStore), name: "connection-health-" + (dark ? "dark" : "light"),
+                        dark: dark, contrast: false, size: NSSize(width: 660, height: 520), directory: directory)
+        }
+        try capture(ConnectAccountView(request: ConnectionRequest(account: nil)).environmentObject(store),
+                    name: "import-openai", dark: false, contrast: false, size: NSSize(width: 600, height: 800), directory: directory)
         store.presentationMode = true
         try capture(MenuBarView().environmentObject(store).environmentObject(updater), name: "menu-private",
                     dark: false, contrast: false, size: NSSize(width: 380, height: 340), directory: directory)
